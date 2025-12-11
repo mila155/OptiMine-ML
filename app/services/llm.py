@@ -13,7 +13,7 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 def call_groq(prompt: str, config: dict) -> str:
     try:
         response = groq_client.chat.completions.create(
-            model=config.get("model", "llama3-70b-8192"),
+            model=config.get("model", "llama-3.3-70b-versatile"),
             messages=[{"role": "user", "content": prompt}],
             temperature=config.get("temperature", 0.2),
             max_tokens=config.get("max_tokens", 1024)
