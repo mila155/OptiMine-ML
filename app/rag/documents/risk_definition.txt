@@ -1,0 +1,19 @@
+Definisi risiko sesuai model optimasi:
+- Risk Score dihitung dari kombinasi cuaca, variabilitas produksi, dan confidence model.
+- Rendah: 0.00 - 0.35
+- Sedang: 0.36 - 0.65
+- Tinggi: 0.66 - 1.00
+
+Faktor risiko tambang:
+- Precipitation tinggi meningkatkan cycle delay dan mengurangi produksi.
+- Angin dan cloud cover berdampak pada efisiensi alat.
+
+Faktor risiko shipping:
+- Wind speed tinggi (> 30 km/h) sangat berisiko.
+- Precipitation dan cloud cover menurunkan loading efficiency.
+- Congestion jetty meningkatkan risiko demurrage.
+
+Rekomendasi:
+- Pilih strategi konservatif pada risiko tinggi.
+- Balanced untuk risiko sedang.
+- Aggressive hanya untuk kondisi risiko rendah dan stabil.

@@ -312,6 +312,60 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Shipping summary generation failed: {str(e)}"
         )
+    
+# ==================== OPTIMIZATION ENDPOINTS ====================
+
+from app.services.optimization import (
+    generate_top3_mining_plans,
+    generate_top3_shipping_plans
+)
+
+@app.post("/mining/optimize", tags=["Optimization"])
+async def optimize_mining(batch: MiningPlanBatchInput):
+    """
+    Optimize mining schedule and return Top 3 plans (with RAG + LLM justification)
+    """
+    try:
+        data = [p.model_dump() for p in batch.plans]
+        pred_df = prediction_service.predict_mining(data)
+
+        result = generate_top3_mining_plans(pred_df, config={
+            "model": "llama3-70b-8192",
+            "temperature": 0.2,
+            "max_tokens": 1024
+        })
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Mining optimization failed: {str(e)}"
+        )
+
+
+@app.post("/shipping/optimize", tags=["Optimization"])
+async def optimize_shipping(batch: ShippingPlanBatchInput):
+    """
+    Optimize shipping schedule and return Top 3 plans (with RAG + LLM justification)
+    """
+    try:
+        data = [p.model_dump() for p in batch.plans]
+        pred_df = prediction_service.predict_shipping(data)
+
+        result = generate_top3_shipping_plans(pred_df, config={
+            "model": "llama3-70b-8192",
+            "temperature": 0.2,
+            "max_tokens": 1024
+        })
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Shipping optimization failed: {str(e)}"
+        )
 
 # ==================== ERROR HANDLERS ====================
 
