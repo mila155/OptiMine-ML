@@ -59,22 +59,8 @@ class PredictionService:
     def predict_mining(self, data: List[Dict[str, Any]]) -> pd.DataFrame:
         df = pd.DataFrame(data)
         
-        if 'plan_date' in df.columns:
-            df['plan_date'] = pd.to_datetime(df['plan_date']).dt.date
-        
-	weather_rows = []
-    	for i, row in df.iterrows():
-        	weather = WeatherService.fetch_weather(
-			lat=row["latitude"],
-            		lon=row["longitude"],
-            		target_date=row["plan_date"]
-        	)
-        	weather_rows.append(weather)
-	
-	weather_df = pd.DataFrame(weather_rows)
-	df = pd.concat([df, weather_df], axis=1)
-
-        priority_map = {"High": 3, "Medium": 2, "Low": 1}
+    
+        priority_map = {"Low": 0, "Medium": 1, "High": 2}
         df['priority_score'] = df['priority_flag'].map(priority_map)
         
         priority_features = [
