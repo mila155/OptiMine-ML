@@ -274,7 +274,7 @@ async def optimize_mining(batch: MiningPlanBatchInput):
         pred_df = prediction_service.predict_mining(data)
 
         result = generate_top3_mining_plans(pred_df, config={
-            "model": "llama3-70b-8192",
+            "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
             "max_tokens": 1024
         })
@@ -298,7 +298,7 @@ async def optimize_shipping(batch: ShippingPlanBatchInput):
         pred_df = prediction_service.predict_shipping(data)
 
         result = generate_top3_shipping_plans(pred_df, config={
-            "model": "llama3-70b-8192",
+            "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
             "max_tokens": 1024
         })
