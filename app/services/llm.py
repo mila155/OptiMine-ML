@@ -18,10 +18,7 @@ def call_groq(prompt: str, config: dict) -> str:
             temperature=config.get("temperature", 0.2),
             max_tokens=config.get("max_tokens", 1024)
         )
-        return response.choices[0].message["content"]
-
+        return response.choices[0].message.content
     except Exception as e:
-        # Tambahkan logging yang jelas untuk Railway log
-        print("⚠️ [LLM ERROR] Could not call Groq API:", e)
-        raise e  # <-- jangan fallback diam-diam
-
+        print("⚠️ LLM ERROR:", e)
+        return f"Penjelasan otomatis gagal: {e}"
