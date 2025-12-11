@@ -12,23 +12,21 @@ class MiningPlanInput(BaseModel):
     planned_production_ton: float
     hauling_distance_km: float
     priority_flag: str  # High, Medium, Low
-    latitude: float
-    longitude: float
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     
     class Config:
         json_schema_extra = {
             "example": {
                 "plan_id": "MP1001",
                 "plan_date": "2025-12-10",
-                "pit_id": "PIT_TUTUPAN",
+                "pit_id": "PIT001",
                 "destination_rom": "ROM_CENTRAL",
                 "planned_production_ton": 8500,
                 "hauling_distance_km": 12,
                 "priority_flag": "High",
-                "precipitation_mm": 5.2,
-                "wind_speed_kmh": 15.3,
-                "cloud_cover_pct": 60,
-                "temp_day": 28
+                "latitude": -0.2345,
+                "longitude": 116.9876
             }
         }
 
