@@ -17,6 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
+COPY app/rag/ ./app/rag/
 COPY models/ ./models/
 
 # Expose port
