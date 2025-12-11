@@ -62,7 +62,7 @@ class PredictionService:
         if 'plan_date' in df.columns:
             df['plan_date'] = pd.to_datetime(df['plan_date']).dt.date
         
-	weather_rows = []
+	    weather_rows = []
     	for i, row in df.iterrows():
         	weather = WeatherService.fetch_weather(
 			lat=row["latitude"],
@@ -71,8 +71,8 @@ class PredictionService:
         	)
         	weather_rows.append(weather)
 	
-	weather_df = pd.DataFrame(weather_rows)
-	df = pd.concat([df, weather_df], axis=1)
+	    weather_df = pd.DataFrame(weather_rows)
+	    df = pd.concat([df, weather_df], axis=1)
 
         priority_map = {"High": 3, "Medium": 2, "Low": 1}
         df['priority_score'] = df['priority_flag'].map(priority_map)
