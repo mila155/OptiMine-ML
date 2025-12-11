@@ -5,7 +5,6 @@ from datetime import datetime, date
 # ==================== MINING SCHEMAS ====================
 
 class MiningPlanInput(BaseModel):
-    """Input schema untuk single mining plan"""
     plan_id: str
     plan_date: date
     pit_id: str
@@ -13,10 +12,8 @@ class MiningPlanInput(BaseModel):
     planned_production_ton: float
     hauling_distance_km: float
     priority_flag: str  # High, Medium, Low
-    precipitation_mm: Optional[float] = 0
-    wind_speed_kmh: Optional[float] = 0
-    cloud_cover_pct: Optional[float] = 0
-    temp_day: Optional[float] = 25
+    latitude: float
+    longitude: float
     
     class Config:
         json_schema_extra = {
@@ -36,11 +33,9 @@ class MiningPlanInput(BaseModel):
         }
 
 class MiningPlanBatchInput(BaseModel):
-    """Batch input untuk multiple mining plans"""
     plans: List[MiningPlanInput]
 
 class MiningPredictionOutput(BaseModel):
-    """Output schema untuk mining prediction"""
     plan_id: str
     plan_date: date
     pit_id: str
@@ -58,7 +53,6 @@ class MiningPredictionOutput(BaseModel):
     weather_impact: str
 
 class MiningSummaryOutput(BaseModel):
-    """Summary output untuk mining operations"""
     period: str
     total_days: int
     total_planned_production_ton: float
@@ -71,7 +65,6 @@ class MiningSummaryOutput(BaseModel):
 # ==================== SHIPPING SCHEMAS ====================
 
 class ShippingPlanInput(BaseModel):
-    """Input schema untuk single shipping plan"""
     shipment_id: str
     vessel_name: str
     assigned_jetty: str
@@ -100,11 +93,9 @@ class ShippingPlanInput(BaseModel):
         }
 
 class ShippingPlanBatchInput(BaseModel):
-    """Batch input untuk multiple shipping plans"""
     plans: List[ShippingPlanInput]
 
 class ShippingPredictionOutput(BaseModel):
-    """Output schema untuk shipping prediction"""
     shipment_id: str
     vessel_name: str
     assigned_jetty: str
@@ -120,7 +111,6 @@ class ShippingPredictionOutput(BaseModel):
     recommended_action: str
 
 class ShippingSummaryOutput(BaseModel):
-    """Summary output untuk shipping operations"""
     period: str
     total_days: int
     total_volume_ton: float
@@ -135,7 +125,6 @@ class ShippingSummaryOutput(BaseModel):
 # ==================== OPTIMIZATION SCHEMAS ====================
 
 class OptimizationStrategy(BaseModel):
-    """Single optimization strategy"""
     plan_id: int
     plan_name: str
     strategy_description: str
@@ -147,21 +136,18 @@ class OptimizationStrategy(BaseModel):
     justification: Optional[str] = None
 
 class MiningOptimizationOutput(BaseModel):
-    """Output untuk mining optimization"""
     plan_type: str
     generated_at: datetime
     executive_summary: Dict[str, Any]
     recommendations: List[OptimizationStrategy]
 
 class ShippingOptimizationOutput(BaseModel):
-    """Output untuk shipping optimization"""
     plan_type: str
     generated_at: datetime
     executive_summary: Dict[str, Any]
     recommendations: List[OptimizationStrategy]
 
 class CombinedOptimizationOutput(BaseModel):
-    """Combined optimization output"""
     mining_plan: MiningOptimizationOutput
     shipping_plan: ShippingOptimizationOutput
     timestamp: datetime
@@ -169,7 +155,6 @@ class CombinedOptimizationOutput(BaseModel):
 # ==================== HEALTH CHECK ====================
 
 class HealthCheck(BaseModel):
-    """Health check response"""
     status: str
     timestamp: datetime
     models_loaded: Dict[str, bool]
@@ -178,7 +163,6 @@ class HealthCheck(BaseModel):
 # ==================== ERROR RESPONSE ====================
 
 class ErrorResponse(BaseModel):
-    """Standard error response"""
     error: str
     detail: Optional[str] = None
     timestamp: datetime

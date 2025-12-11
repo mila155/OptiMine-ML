@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException, status
+import pandas as pd
+from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from datetime import datetime
 from typing import List
+from app.services.prediction import PredictionService
 import os
 
 from app.schemas import (
@@ -10,9 +12,7 @@ from app.schemas import (
     ShippingPlanInput, ShippingPlanBatchInput, ShippingPredictionOutput, ShippingSummaryOutput,
     HealthCheck, ErrorResponse
 )
-from app.services.prediction import PredictionService
 
-# Initialize FastAPI app
 app = FastAPI(
     title="OptiMine API",
     description="AI-powered Mining & Shipping Operations Optimization",
@@ -21,16 +21,14 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Initialize services
 models_dir = os.getenv("MODELS_DIR", "models")
 prediction_service = PredictionService(models_dir=models_dir)
 
@@ -38,7 +36,6 @@ prediction_service = PredictionService(models_dir=models_dir)
 
 @app.get("/", tags=["Health"])
 async def root():
-    """Root endpoint"""
     return {
         "message": "Welcome to OptiMine API",
         "version": "1.0.0",
@@ -47,7 +44,6 @@ async def root():
 
 @app.get("/health", response_model=HealthCheck, tags=["Health"])
 async def health_check():
-    """Check API health and model status"""
     models_status = prediction_service.is_healthy()
     
     return HealthCheck(
@@ -59,25 +55,35 @@ async def health_check():
 
 # ==================== MINING ENDPOINTS ====================
 
+@app.post("/mining/upload-csv", tags=["Mining"])
+async def upload_csv_for_mining(file: UploadFile = File(...)):
+    try:
+        contents = await file.read()
+
+        df = pd.read_csv(
+            io.BytesIO(contents)
+        )
+
+        records = df.to_dict(orient="records")
+
+        result_df = prediction_service.predict_mining(records)
+
+        return result_df.to_dict(orient="records")
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"CSV processing failed: {str(e)}"
+        )
+
+
 @app.post("/mining/predict", response_model=List[MiningPredictionOutput], tags=["Mining"])
 async def predict_mining_single(plan: MiningPlanInput):
-    """
-    Predict single mining plan
-    
-    - **plan_id**: Unique plan identifier
-    - **plan_date**: Date of operation
-    - **pit_id**: Source pit identifier
-    - **planned_production_ton**: Target production volume
-    - **priority_flag**: Original priority (High/Medium/Low)
-    """
     try:
-        # Convert single input to list
         data = [plan.model_dump()]
         
-        # Predict
         result_df = prediction_service.predict_mining(data)
         
-        # Convert to response format
         response = []
         for _, row in result_df.iterrows():
             response.append(MiningPredictionOutput(
@@ -108,19 +114,11 @@ async def predict_mining_single(plan: MiningPlanInput):
 
 @app.post("/mining/predict/batch", response_model=List[MiningPredictionOutput], tags=["Mining"])
 async def predict_mining_batch(batch: MiningPlanBatchInput):
-    """
-    Predict multiple mining plans in batch
-    
-    Accepts a list of mining plans and returns predictions for all
-    """
     try:
-        # Convert batch to list of dicts
         data = [plan.model_dump() for plan in batch.plans]
         
-        # Predict
         result_df = prediction_service.predict_mining(data)
         
-        # Convert to response format
         response = []
         for _, row in result_df.iterrows():
             response.append(MiningPredictionOutput(
@@ -151,19 +149,11 @@ async def predict_mining_batch(batch: MiningPlanBatchInput):
 
 @app.post("/mining/summary", response_model=MiningSummaryOutput, tags=["Mining"])
 async def get_mining_summary(batch: MiningPlanBatchInput):
-    """
-    Get aggregated summary of mining operations
-    
-    Returns daily summaries and overall statistics
-    """
     try:
-        # Convert batch to list of dicts
         data = [plan.model_dump() for plan in batch.plans]
         
-        # Predict
         result_df = prediction_service.predict_mining(data)
         
-        # Calculate summary
         summary = {
             "period": f"{result_df['plan_date'].min()} to {result_df['plan_date'].max()}",
             "total_days": len(result_df['plan_date'].unique()),
@@ -191,22 +181,11 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
 
 @app.post("/shipping/predict", response_model=List[ShippingPredictionOutput], tags=["Shipping"])
 async def predict_shipping_single(plan: ShippingPlanInput):
-    """
-    Predict single shipping plan
-    
-    - **shipment_id**: Unique shipment identifier
-    - **vessel_name**: Name of the vessel
-    - **assigned_jetty**: Jetty location
-    - **planned_volume_ton**: Target shipping volume
-    """
     try:
-        # Convert single input to list
         data = [plan.model_dump()]
         
-        # Predict
         result_df = prediction_service.predict_shipping(data)
         
-        # Convert to response format
         response = []
         for _, row in result_df.iterrows():
             response.append(ShippingPredictionOutput(
@@ -235,17 +214,11 @@ async def predict_shipping_single(plan: ShippingPlanInput):
 
 @app.post("/shipping/predict/batch", response_model=List[ShippingPredictionOutput], tags=["Shipping"])
 async def predict_shipping_batch(batch: ShippingPlanBatchInput):
-    """
-    Predict multiple shipping plans in batch
-    """
     try:
-        # Convert batch to list of dicts
         data = [plan.model_dump() for plan in batch.plans]
         
-        # Predict
         result_df = prediction_service.predict_shipping(data)
         
-        # Convert to response format
         response = []
         for _, row in result_df.iterrows():
             response.append(ShippingPredictionOutput(
@@ -274,19 +247,11 @@ async def predict_shipping_batch(batch: ShippingPlanBatchInput):
 
 @app.post("/shipping/summary", response_model=ShippingSummaryOutput, tags=["Shipping"])
 async def get_shipping_summary(batch: ShippingPlanBatchInput):
-    """
-    Get aggregated summary of shipping operations.
-    
-    Returns daily summary and overall statistics.
-    """
     try:
-        # Convert batch to list of dicts
         data = [plan.model_dump() for plan in batch.plans]
 
-        # Predict shipping using existing service
         result_df = prediction_service.predict_shipping(data)
 
-        # Calculate summary
         summary = {
             "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
             "total_days": len(result_df['eta_date'].unique()),
