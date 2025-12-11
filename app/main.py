@@ -56,28 +56,6 @@ async def health_check():
 
 # ==================== MINING ENDPOINTS ====================
 
-@app.post("/mining/upload-csv", tags=["Mining"])
-async def upload_csv_for_mining(file: UploadFile = File(...)):
-    try:
-        contents = await file.read()
-
-        df = pd.read_csv(
-            io.BytesIO(contents)
-        )
-
-        records = df.to_dict(orient="records")
-
-        result_df = prediction_service.predict_mining(records)
-
-        return result_df.to_dict(orient="records")
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"CSV processing failed: {str(e)}"
-        )
-
-
 @app.post("/mining/predict", response_model=List[MiningPredictionOutput], tags=["Mining"])
 async def predict_mining_single(plan: MiningPlanInput):
     try:
