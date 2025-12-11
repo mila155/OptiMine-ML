@@ -9,6 +9,8 @@ from app.services.prediction import PredictionService
 import os
 from app.services.llm_service import LLMService
 llm_service = LLMService()
+from app.rag.retriever import RAGRetriever
+rag = RAGRetriever()
 
 from app.schemas import (
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
@@ -56,6 +58,45 @@ async def health_check():
         api_version="1.0.0"
     )
 
+# ==================== CHATBOT ====================
+
+@app.post("/chat", tags=["Chatbot"])
+async def chat_with_rag(query: str):
+    """
+    Chatbot RAG untuk seluruh domain OptiMine:
+    - mining
+    - shipping
+    - hauling
+    - weather
+    - ML explanation
+    """
+    try:
+        context = rag.retrieve(query, top_k=5)
+
+        prompt = f"""
+        Anda adalah AI assistant untuk sistem OptiMine.
+        Jawab pertanyaan user menggunakan konteks berikut:
+
+        ==== KNOWLEDGE BASE ====
+        {context}
+
+        ==== USER QUESTION ====
+        {query}
+
+        Jawab dengan jelas, ringkas, dan berbasis data.
+        """
+
+        answer = llm.ask(prompt)
+
+        return {
+            "query": query,
+            "answer": answer,
+            "context_used": context,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+        
 # ==================== MINING ENDPOINTS ====================
 
 @app.post("/mining/predict", response_model=List[MiningPredictionOutput], tags=["Mining"])
