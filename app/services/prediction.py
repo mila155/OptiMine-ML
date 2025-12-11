@@ -61,7 +61,13 @@ class PredictionService:
         
         if 'plan_date' in df.columns:
             df['plan_date'] = pd.to_datetime(df['plan_date']).dt.date
-        
+
+        for i, row in df.iterrows():
+            if ("latitude" not in row) or pd.isna(row["latitude"]):
+                raise ValueError(f"Missing latitude for plan_id={row.get('plan_id')}")
+            if ("longitude" not in row) or pd.isna(row["longitude"]):
+                raise ValueError(f"Missing longitude for plan_id={row.get('plan_id')}")
+            
         weather_rows = []
         for i, row in df.iterrows():
             weather = WeatherService.fetch_weather(
