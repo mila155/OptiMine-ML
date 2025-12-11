@@ -9,6 +9,55 @@ from typing import List, Dict, Any, Tuple
 from datetime import datetime, timedelta
 import json
 
+# --- PATCH: import AI helper generators (may not exist on startup) ---
+# If app.services.optimization_ai is present, import; otherwise fallback-safe helpers are used.
+try:
+    from app.services.optimization_ai import (
+        generate_strengths_ai,
+        generate_limitations_ai,
+        generate_steps_ai
+    )
+    _OPT_AI_AVAILABLE = True
+except Exception:
+    # Fallback simple implementations (safe, deterministic) so service never crashes.
+    _OPT_AI_AVAILABLE = False
+
+    def generate_strengths_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
+        # Simple heuristic-based strengths generator (fallback)
+        strengths = []
+        fin = plan_data.get("financial", {}) if isinstance(plan_data, dict) else plan_data.get('financial_impact', {})
+        conf_scores = [s.get('confidence_score', 0.5) for s in plan_data.get("schedule", [])] if plan_data.get("schedule") else []
+        avg_conf = float(np.mean(conf_scores)) if conf_scores else 0.6
+        if avg_conf > 0.85:
+            strengths.append("Tingkat keyakinan tinggi pada eksekusi rencana")
+        else:
+            strengths.append("Rencana mempertimbangkan mitigasi risiko")
+        if fin and fin.get('cost_savings_usd', 0) > 0:
+            strengths.append("Menunjukkan potensi penghematan biaya")
+        strengths.append("Struktur rencana mudah dipahami")
+        return strengths
+
+    def generate_limitations_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
+        # Simple heuristic-based limitations generator (fallback)
+        limitations = []
+        fin = plan_data.get("financial", {}) if isinstance(plan_data, dict) else plan_data.get('financial_impact', {})
+        if fin and fin.get('avg_risk_score', 0) > 0.6:
+            limitations.append("Skor risiko rata-rata relatif tinggi untuk beberapa hari")
+        else:
+            limitations.append("Perlu verifikasi lapangan dan data cuaca real-time")
+        limitations.append("Model masih menggunakan asumsi biaya dasar (dummy model)")
+        return limitations
+
+    def generate_steps_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
+        # Simple fallback steps
+        steps = []
+        steps.append(f"Implement {plan_data.get('strategy', plan_data.get('plan_name','strategy'))} starting Day 1")
+        steps.append("Monitor kondisi operasional dan cuaca setiap hari")
+        steps.append("Sesuaikan alokasi sumber daya bila risiko meningkat")
+        return steps
+# --- /PATCH -----------------------------------------------------------
+
+
 class OptimizationService:
     """Service untuk optimization dan scheduling"""
     
@@ -70,7 +119,7 @@ class OptimizationService:
             'metrics': {
                 'total_planned_ton': float(total_planned),
                 'total_predicted_ton': float(total_predicted),
-                'achievement_rate': float(total_predicted / total_planned * 100),
+                'achievement_rate': float(total_predicted / total_planned * 100) if total_planned > 0 else 0.0,
                 'avg_efficiency': float(avg_efficiency)
             },
             'top_recommendations': recommendations,
@@ -280,6 +329,7 @@ class OptimizationService:
             plan['sequence'].append(operation)
         
         return plan
+
 # Try to import RAG engine & LLM call function (fallback-safe)
 try:
     from app.rag.rag_engine import RAG_ENGINE  # may be None if not initialized
@@ -507,6 +557,40 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
             ]
         }
 
+        # --- PATCH: enrich strengths/limitations/implementation_steps using AI helpers ---
+        # Build minimal plan_data structure for helper calls (keeps variable names intact)
+        try:
+            plan_data_for_ai = {
+                "strategy": plan_obj.get("plan_name"),
+                "schedule": plan_obj.get("optimized_schedule"),
+                "financial": plan_obj.get("financial_impact")
+            }
+
+            # call helpers (they may be real AI wrappers or fallback deterministic functions)
+            try:
+                plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="mining", config=config)
+            except Exception as e:
+                # safe fallback keep existing examples
+                plan_obj["strengths"] = plan_obj.get("strengths", ["Strength example 1", "Strength example 2"])
+
+            try:
+                plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="mining", config=config)
+            except Exception as e:
+                plan_obj["limitations"] = plan_obj.get("limitations", ["Limitation example 1", "Limitation example 2"])
+
+            try:
+                # If helper returns steps, replace; otherwise keep default
+                steps_generated = generate_steps_ai(plan_data_for_ai, domain="mining", config=config)
+                if isinstance(steps_generated, list) and len(steps_generated) > 0:
+                    plan_obj["implementation_steps"] = steps_generated
+            except Exception as e:
+                # keep default hardcoded steps
+                pass
+        except Exception:
+            # in worst case, keep defaults
+            pass
+        # --- /PATCH ---------------------------------------------------------------
+
         # Add AI justification using RAG + LLM (best-effort, safe fallback)
         try:
             plan_obj['justification'] = generate_ai_description_mining(plan_obj, config)
@@ -635,6 +719,35 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                 "Limitation example 2"
             ]
         }
+
+        # --- PATCH: enrich strengths/limitations/implementation_steps using AI helpers (shipping) ---
+        try:
+            plan_data_for_ai = {
+                "strategy": plan_obj.get("plan_name"),
+                "schedule": plan_obj.get("optimized_schedule"),
+                "financial": plan_obj.get("financial_impact")
+            }
+
+            # call helpers
+            try:
+                plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="shipping", config=config)
+            except Exception:
+                plan_obj["strengths"] = plan_obj.get("strengths", ["Strength example 1", "Strength example 2"])
+
+            try:
+                plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="shipping", config=config)
+            except Exception:
+                plan_obj["limitations"] = plan_obj.get("limitations", ["Limitation example 1", "Limitation example 2"])
+
+            try:
+                steps_generated = generate_steps_ai(plan_data_for_ai, domain="shipping", config=config)
+                if isinstance(steps_generated, list) and len(steps_generated) > 0:
+                    plan_obj["implementation_steps"] = steps_generated
+            except Exception:
+                pass
+        except Exception:
+            pass
+        # --- /PATCH ---------------------------------------------------------------
 
         # Add AI justification using RAG + LLM
         try:
