@@ -4,9 +4,10 @@ from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from datetime import datetime
-from typing import List
+from typing import List, Optional, Dict, Any
 from app.services.prediction import PredictionService
 import os
+from pydantic import BaseModel
 from app.services.llm_service import LLMService
 llm_service = LLMService()
 from app.rag.retriever import RAGRetriever
@@ -59,43 +60,55 @@ async def health_check():
     )
 
 # ==================== CHATBOT ====================
+    
+class ChatRequest(BaseModel):
+    message: str
+    top_k: Optional[int] = 4
+    history: Optional[List[Dict[str, str]]] = None
+    include_sources: Optional[bool] = True
 
-@app.post("/chat", tags=["Chatbot"])
-async def chat_with_rag(query: str):
+class ChatResponse(BaseModel):
+    answer: str
+    sources: List[Dict[str, Any]]
+    used_count: int
+
+@app.post("/chat", response_model=ChatResponse, tags=["Chatbot"])
+async def chat_rag_endpoint(req: ChatRequest):
     """
-    Chatbot RAG untuk seluruh domain OptiMine:
-    - mining
-    - shipping
-    - hauling
-    - weather
-    - ML explanation
+    Chat endpoint that uses RAG retriever + LLM (Groq).
+    Request JSON:
+    {
+      "message": "Apa penyebab produksi turun?",
+      "top_k": 4,
+      "history": [{"role":"user","message":"..."}],
+      "include_sources": true
+    }
     """
     try:
-        context = rag.retrieve(query, top_k=5)
+        docs = rag_service.retrieve_context(req.message, top_k=req.top_k)
 
-        prompt = f"""
-        Anda adalah AI assistant untuk sistem OptiMine.
-        Jawab pertanyaan user menggunakan konteks berikut:
+        prompt = rag_service.build_prompt(req.message, docs, history=req.history)
 
-        ==== KNOWLEDGE BASE ====
-        {context}
+        answer = llm_service.ask(prompt)
 
-        ==== USER QUESTION ====
-        {query}
+        sources = []
+        for i, d in enumerate(docs):
+            sources.append({
+                "source_index": i+1,
+                "id": d.get("id"),
+                "score": d.get("score"),
+                "metadata": d.get("metadata"),
+                "snippet": (d.get("text")[:500] + "...") if len(d.get("text",""))>500 else d.get("text")
+            })
 
-        Jawab dengan jelas, ringkas, dan berbasis data.
-        """
-
-        answer = llm.ask(prompt)
-
-        return {
-            "query": query,
-            "answer": answer,
-            "context_used": context,
-        }
+        return ChatResponse(
+            answer=answer,
+            sources=sources if req.include_sources else [],
+            used_count=len(docs)
+        )
 
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=f"RAG chat failed: {e}")
         
 # ==================== MINING ENDPOINTS ====================
 
