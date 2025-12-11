@@ -7,6 +7,8 @@ from datetime import datetime
 from typing import List
 from app.services.prediction import PredictionService
 import os
+from app.services.llm_service import LLMService
+llm_service = LLMService()
 
 from app.schemas import (
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
@@ -147,6 +149,7 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
                 'risk_level': lambda x: x.mode()[0] if len(x.mode()) > 0 else 'UNKNOWN'
             }).reset_index().to_dict('records')
         }
+        summary["ai_summary"] = llm_service.summarize_mining(summary)
         
         return MiningSummaryOutput(**summary)
         
@@ -248,6 +251,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             "route_recommendations": {},
             "ai_summary": None
         }
+        summary["ai_summary"] = llm_service.summarize_shipping(summary)
 
         return ShippingSummaryOutput(**summary)
 
