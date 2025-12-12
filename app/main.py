@@ -13,8 +13,13 @@ from app.services.llm_service import LLMService
 llm_service = LLMService()
 from app.rag.vectorstore import VectorStore
 from app.rag.retriever import RAGRetriever
+
 vs = VectorStore("app/rag/documents")
-vs.build()
+try:
+    vs.build()
+except Exception as e:
+    print("Warning: RAG build failed:", e)
+    
 rag = RAGRetriever(vector_store=vs)
 
 from app.schemas import (
