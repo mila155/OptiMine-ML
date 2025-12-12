@@ -367,14 +367,111 @@ def _make_executive_summary_mining(df: pd.DataFrame) -> Dict[str, Any]:
 
 def _make_executive_summary_shipping(df: pd.DataFrame) -> Dict[str, Any]:
     """Build executive summary for shipping plan"""
+    # Gunakan format tanggal yang konsisten
+    df['eta_date'] = pd.to_datetime(df['eta_date'])
+    
     return {
-        "period": f"{df['date'].min()} hingga {df['date'].max()}" if 'date' in df.columns else f"{df['eta_date'].min()} hingga {df['eta_date'].max()}",
-        "total_days": int(len(df['eta_date'].unique())) if 'eta_date' in df.columns else int(len(df['date'].unique())),
-        "total_planned_shipment_ton": float(df['planned_volume_ton'].sum()) if 'planned_volume_ton' in df.columns else float(df['total_volume_ton'].sum()),
+        "period": f"{df['eta_date'].min().strftime('%Y-%m-%d %H:%M:%S')} hingga {df['eta_date'].max().strftime('%Y-%m-%d %H:%M:%S')}",
+        "total_days": int(len(df['eta_date'].unique())),
+        "total_planned_shipment_ton": round(float(df['planned_volume_ton'].sum()) if 'planned_volume_ton' in df.columns else float(df['total_volume_ton'].sum()), 2),
         "avg_loading_efficiency": round(float(df['avg_efficiency'].mean()) if 'avg_efficiency' in df.columns else float(df['loading_efficiency'].mean()), 2),
         "total_demurrage_cost_usd": round(float(df['predicted_demurrage_cost'].sum()) if 'predicted_demurrage_cost' in df.columns else float(df['total_demurrage_cost_usd'].sum()), 2),
         "high_risk_days": int((df['risk_level'] == 'HIGH').sum())
+    }                                                                                                                                                                                                                                                                                           
+
+# -------------------------
+# Shipping helper functions
+# -------------------------
+def _generate_shipping_steps(plan_name: str) -> List[str]:
+    """Generate implementation steps for shipping plans"""
+    steps = {
+        "Conservative Plan": [
+            "Kurangi target loading pada hari angin kencang (>30km/j)",
+            "Jadwalkan kedatangan kapal dengan buffer waktu cuaca",
+            "Prioritaskan keberangkatan tepat waktu daripada volume"
+        ],
+        "Balanced Plan": [
+            "Pertahankan volume pengiriman sesuai rencana",
+            "Penyesuaian minor hanya saat cuaca ekstrem",
+            "Monitoring real-time dan penjadwalan ulang dinamis"
+        ],
+        "Aggressive Plan": [
+            "Tingkatkan target loading 10%",
+            "Perpanjang jam loading untuk maksimalkan throughput",
+            "Terima risiko demurrage moderat untuk keuntungan volume"
+        ]
     }
+    return steps.get(plan_name, [
+        "Implementasikan rencana mulai Hari 1",
+        "Monitor kondisi cuaca dan operasional",
+        "Sesuaikan operasi berdasarkan evaluasi harian"
+    ])
+
+def _generate_shipping_strengths(plan_name: str, financial_impact: Dict) -> List[str]:
+    """Generate strengths for shipping plans"""
+    strengths_map = {
+        "Conservative Plan": [
+            "Meminimalkan penalti demurrage",
+            "Mengurangi keterlambatan akibat cuaca",
+            "Prediktabilitas turnaround kapal lebih baik",
+            "Tekanan operasional lebih rendah"
+        ],
+        "Balanced Plan": [
+            "Mencapai target revenue",
+            "Eksposur demurrage terkendali",
+            "Adaptasi fleksibel terhadap kondisi",
+            "Utilisasi kapasitas kapal optimal"
+        ],
+        "Aggressive Plan": [
+            "Generasi revenue maksimum",
+            "Utilisasi kapasitas kapal penuh",
+            "Menangkap peluang pasar permintaan tinggi",
+            "Memperkuat posisi pasar"
+        ]
+    }
+    return strengths_map.get(plan_name, [
+        "Struktur rencana yang jelas",
+        "Mempertimbangkan risiko operasional",
+        "Target yang terukur dan realistis"
+    ])
+
+def _generate_shipping_limitations(plan_name: str, financial_impact: Dict) -> List[Dict[str, str]]:
+    """Generate limitations for shipping plans"""
+    limitations_map = {
+        "Conservative Plan": [
+            {"keterbatasan": "Revenue lebih rendah", "deskripsi": "Volume pengiriman yang berkurang berdampak pada total revenue"},
+            {"keterbatasan": "Potensi kehilangan peluang", "deskripsi": "Mungkin kehilangan peluang pengiriman di hari optimal"},
+            {"keterbatasan": "Penjadwalan ulang", "deskripsi": "Mungkin perlu penjadwalan ulang kapal dan dermaga"}
+        ],
+        "Balanced Plan": [
+            {"keterbatasan": "Memerlukan monitoring aktif", "deskripsi": "Perlu monitoring cuaca dan operasional yang intensif"},
+            {"keterbatasan": "Rencana kontingensi", "deskripsi": "Perlu rencana kontingensi untuk kondisi tak terduga"},
+            {"keterbatasan": "Risiko moderat", "deskripsi": "Risiko demurrage moderat masih ada dan perlu diwaspadai"}
+        ],
+        "Aggressive Plan": [
+            {"keterbatasan": "Risiko demurrage tinggi", "deskripsi": "Potensi biaya demurrage lebih tinggi akibat target ambisius"},
+            {"keterbatasan": "Eksposur cuaca meningkat", "deskripsi": "Lebih rentan terhadap gangguan cuaca karena volume tinggi"},
+            {"keterbatasan": "Keterlambatan jadwal", "deskripsi": "Potensi keterlambatan jadwal kapal lebih besar"},
+            {"keterbatasan": "Resource intensif", "deskripsi": "Memerlukan resource kontingensi yang kuat dan siap siaga"}
+        ]
+    }
+    return limitations_map.get(plan_name, [
+        {"keterbatasan": "Data terbatas", "deskripsi": "Berdasarkan data historis yang tersedia"},
+        {"keterbatasan": "Asumsi model", "deskripsi": "Menggunakan asumsi biaya dan revenue standar"}
+    ])
+
+def _generate_shipping_justification(plan_data: Dict[str, Any]) -> str:
+    """Manual fallback justification for shipping"""
+    plan_name = plan_data.get('plan_name', '')
+    savings = plan_data.get('financial_impact', {}).get('demurrage_savings_usd', 0)
+    revenue_change = plan_data.get('financial_impact', {}).get('revenue_change_usd', 0)
+    
+    if "Conservative" in plan_name:
+        return f"Rencana konservatif berfokus pada minimisasi biaya demurrage dan risiko keterlambatan. {'Menghasilkan penghematan demurrage.' if savings > 0 else 'Menjaga stabilitas operasional.'}"
+    elif "Aggressive" in plan_name:
+        return f"Rencana agresif memaksimalkan volume pengiriman untuk mencapai target revenue tinggi. {'Meningkatkan revenue secara signifikan.' if revenue_change > 0 else 'Fokus pada utilisasi kapasitas maksimal.'}"
+    else:
+        return f"Rencana seimbang menjaga keseimbangan antara target revenue dan manajemen risiko demurrage."
 
 # -------------------------
 # AI description helpers (use RAG context inside prompt)
@@ -602,82 +699,125 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
 # -------------------------
 # Top3 Shipping generator - PATCHED
 # -------------------------
+# -------------------------
+# Top3 Shipping generator - FIXED
+# -------------------------
 def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
     df = predictions.copy()
-    df['eta_date'] = pd.to_datetime(df['eta_date']) if 'eta_date' in df.columns else pd.date_range(start=datetime.now().date(), periods=len(df))
-
-    executive_summary = _make_executive_summary_shipping(df)
-
+    
+    # Pastikan kolom yang diperlukan ada
+    df['eta_date'] = pd.to_datetime(df['eta_date'])
+    
+    # Kelompokkan per hari jika ada multiple shipments per hari
+    daily_df = df.groupby('eta_date').agg({
+        'planned_volume_ton': 'sum',
+        'loading_efficiency': 'mean',
+        'predicted_demurrage_cost': 'sum',
+        'wind_speed_kmh': 'mean',
+        'confidence_score': 'mean'
+    }).reset_index()
+    
+    # Buat executive summary dengan weather summary
+    executive_summary = {
+        "period": f"{daily_df['eta_date'].min().strftime('%Y-%m-%d %H:%M:%S')} hingga {daily_df['eta_date'].max().strftime('%Y-%m-%d %H:%M:%S')}",
+        "total_days": int(len(daily_df)),
+        "total_planned_shipment_ton": round(float(daily_df['planned_volume_ton'].sum()), 2),
+        "avg_loading_efficiency": round(float(daily_df['loading_efficiency'].mean()), 2),
+        "total_demurrage_cost_usd": round(float(daily_df['predicted_demurrage_cost'].sum()), 2),
+        "high_risk_days": int((daily_df['loading_efficiency'] < 0.5).sum()),
+        "weather_summary": {
+            "max_wind_speed_kmh": round(float(daily_df['wind_speed_kmh'].max()), 1),
+            "high_wind_days": int((daily_df['wind_speed_kmh'] > 30).sum())
+        }
+    }
+    
+    # 3 strategi yang sama
     strategies = [
-        {"id": 1, "name": "Conservative Plan", "ship_multiplier": 0.95, "risk_threshold": 0.7, "description": "Minimalkan biaya demurrage dan keterlambatan akibat cuaca"},
-        {"id": 2, "name": "Balanced Plan", "ship_multiplier": 1.00, "risk_threshold": 0.6, "description": "Optimalkan revenue sambil mengelola risiko demurrage dan cuaca"},
-        {"id": 3, "name": "Aggressive Plan", "ship_multiplier": 1.10, "risk_threshold": 0.5, "description": "Maksimalkan revenue pengiriman dan utilisasi kapal"}
+        {"id": 1, "name": "Conservative Plan", "multiplier": 0.85, "description": "Minimalkan biaya demurrage dan keterlambatan akibat cuaca"},
+        {"id": 2, "name": "Balanced Plan", "multiplier": 1.00, "description": "Optimalkan revenue sambil mengelola risiko demurrage dan cuaca"},
+        {"id": 3, "name": "Aggressive Plan", "multiplier": 1.10, "description": "Maksimalkan revenue pengiriman dan utilisasi kapal"}
     ]
-
+    
     recommendations = []
-
+    
     for s in strategies:
         optimized_schedule = []
-        total_baseline_revenue = 0.0
-        total_optimized_revenue = 0.0
-        total_demurrage_saved = 0.0
-        total_risk_score = 0.0
-
-        for idx, row in df.iterrows():
-            conf_items = [v for v in [row.get('loading_efficiency'), row.get('confidence_score')] if v is not None]
-            overall_conf = float(np.mean(conf_items)) if conf_items else 0.6
-
-            adj_multiplier = s['ship_multiplier'] * (0.85 if overall_conf < s['risk_threshold'] else 1.0)
-            rationale = f"{s['name']}: Reduced due to risk" if overall_conf < s['risk_threshold'] else f"{s['name']}: Operating normally"
-
-            original_ship = float(row.get('planned_volume_ton', row.get('total_volume_ton', 0)))
-            adjusted_ship = round(original_ship * adj_multiplier, 0)
-
-            baseline_revenue = original_ship * 65.0
-            optimized_revenue = adjusted_ship * 65.0
-            demurrage_cost = float(row.get('predicted_demurrage_cost', row.get('total_demurrage_cost_usd', 0)))
-            demurrage_saved = demurrage_cost * (1 - (adj_multiplier if adj_multiplier < 1 else 1))
-
-            total_baseline_revenue += baseline_revenue
-            total_optimized_revenue += optimized_revenue
-            total_demurrage_saved += demurrage_saved
-            total_risk_score += (1.0 - overall_conf)
-
+        baseline_total_revenue = 0
+        optimized_total_revenue = 0
+        demurrage_savings = 0
+        
+        for i, (_, row) in enumerate(daily_df.iterrows(), 1):
+            original_ton = row['planned_volume_ton']
+            
+            # Hitung adjusted ton berdasarkan strategi dan kondisi
+            if "Conservative" in s['name']:
+                if row['wind_speed_kmh'] > 25:
+                    adjusted_ton = original_ton * 0.85
+                    rationale = "Kurangi volume 15% karena risiko cuaca/demurrage"
+                else:
+                    adjusted_ton = original_ton * 0.95
+                    rationale = "Operasi pengiriman normal dengan pendekatan hati-hati"
+            
+            elif "Aggressive" in s['name']:
+                if row['loading_efficiency'] < 0.5:
+                    adjusted_ton = original_ton * 0.935  # Kurangi 6.5%
+                    rationale = "Kurangi volume 15% pada kondisi tidak optimal"
+                else:
+                    adjusted_ton = original_ton * 1.10
+                    rationale = "Operasi pengiriman maksimal untuk capai target tinggi"
+            
+            else:  # Balanced Plan
+                if row['wind_speed_kmh'] > 25 or row['loading_efficiency'] < 0.6:
+                    adjusted_ton = original_ton * 0.85
+                    rationale = "Kurangi volume 15% untuk antisipasi risiko"
+                else:
+                    adjusted_ton = original_ton
+                    rationale = "Operasi pengiriman normal sesuai rencana"
+            
+            # Hitung revenue (contoh: $65 per ton)
+            baseline_revenue = original_ton * 65
+            optimized_revenue = adjusted_ton * 65
+            
+            # Hitung penghematan demurrage (proporsional dengan pengurangan volume)
+            demurrage_saving = row['predicted_demurrage_cost'] * (1 - (adjusted_ton / original_ton))
+            
+            baseline_total_revenue += baseline_revenue
+            optimized_total_revenue += optimized_revenue
+            demurrage_savings += demurrage_saving
+            
             optimized_schedule.append({
-                "date": str(row['eta_date'].date()),
-                "shipment_id": row.get('shipment_id'),
-                "original_shipping_ton": int(original_ship),
-                "optimized_shipping_ton": int(adjusted_ship),
-                "adjustment_pct": round(((adjusted_ship - original_ship) / original_ship * 100) if original_ship > 0 else 0, 2),
-                "baseline_revenue_usd": round(float(baseline_revenue), 2),
-                "optimized_revenue_usd": round(float(optimized_revenue), 2),
-                "demurrage_cost_usd": round(float(demurrage_cost), 2),
-                "confidence_score": round(overall_conf, 2),
-                "weather_condition": f"Angin (max): {row.get('max_wind_kmh', 0)}km/h",
+                "date": row['eta_date'].strftime('%Y-%m-%d %H:%M:%S'),
+                "day": i,
+                "original_shipping_ton": round(original_ton, 0),
+                "optimized_shipping_ton": round(adjusted_ton, 0),
+                "adjustment_pct": round(((adjusted_ton - original_ton) / original_ton * 100), 2),
+                "baseline_revenue_usd": round(baseline_revenue, 2),
+                "optimized_revenue_usd": round(optimized_revenue, 2),
+                "demurrage_cost_usd": round(row['predicted_demurrage_cost'], 2),
+                "confidence_score": round(row['confidence_score'], 2),
+                "weather_condition": f"Angin: {round(row['wind_speed_kmh'], 1)}km/j",
                 "rationale": rationale
             })
-
+        
+        # Hitung financial impact
         financial_impact = {
-            "baseline_total_revenue_usd": round(total_baseline_revenue, 2),
-            "optimized_total_revenue_usd": round(total_optimized_revenue, 2),
-            "revenue_change_usd": round(total_optimized_revenue - total_baseline_revenue, 2),
-            "demurrage_savings_usd": round(total_demurrage_saved, 2),
-            "avg_risk_score": round(total_risk_score / len(df), 2) if len(df) > 0 else 0.0
+            "baseline_total_revenue_usd": round(baseline_total_revenue, 2),
+            "optimized_total_revenue_usd": round(optimized_total_revenue, 2),
+            "revenue_change_usd": round(optimized_total_revenue - baseline_total_revenue, 2),
+            "demurrage_savings_usd": round(demurrage_savings, 2),
+            "avg_risk_score": round(1 - (daily_df['loading_efficiency'].mean()), 2)
         }
-
+        
+        # Buat plan object
         plan_obj = {
             "plan_id": s['id'],
             "plan_name": s['name'],
             "strategy_description": s['description'],
             "optimized_schedule": optimized_schedule,
             "financial_impact": financial_impact,
-            "implementation_steps": [
-                "Implement " + s['name'] + " starting Day 1",
-                "Monitor weather updates daily",
-                "Adjust berth allocation as needed"
-            ],
-            "strengths": [],
-            "limitations": []
+            "implementation_steps": _generate_shipping_steps(s['name']),
+            "strengths": _generate_shipping_strengths(s['name'], financial_impact),
+            "limitations": _generate_shipping_limitations(s['name'], financial_impact)
         }
 
         # --- PATCH: populate strengths & limitations safely ---
@@ -685,21 +825,147 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
         try:
             plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="shipping", config=config)
         except Exception:
-            plan_obj["strengths"] = ["Strength example fallback"]
+            plan_obj["strengths"] = _generate_shipping_strengths(s['name'], financial_impact)
 
         try:
             plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="shipping", config=config)
         except Exception:
-            plan_obj["limitations"] = ["Limitation example fallback"]
+            plan_obj["limitations"] = _generate_shipping_limitations(s['name'], financial_impact)
 
         # --- PATCH: generate justification after strengths & limitations ---
         try:
             plan_obj['justification'] = generate_ai_description_shipping(plan_obj, config)
         except Exception:
-            plan_obj['justification'] = "AI justification fallback"
+            plan_obj['justification'] = _generate_shipping_justification(plan_obj)
 
         recommendations.append(plan_obj)
-
+    
+    return {
+        "plan_type": "RENCANA OPTIMASI PENGIRIMAN",
+        "generated_at": datetime.now().isoformat(),
+        "executive_summary": executive_summary,
+        "recommendations": recommendations
+    }
+    df = predictions.copy()
+    
+    # Pastikan kolom yang diperlukan ada
+    df['eta_date'] = pd.to_datetime(df['eta_date'])
+    
+    # Kelompokkan per hari jika ada multiple shipments per hari
+    daily_df = df.groupby('eta_date').agg({
+        'planned_volume_ton': 'sum',
+        'loading_efficiency': 'mean',
+        'predicted_demurrage_cost': 'sum',
+        'wind_speed_kmh': 'mean',
+        'confidence_score': 'mean'
+    }).reset_index()
+    
+    # Buat executive summary dengan weather summary
+    executive_summary = {
+        "period": f"{daily_df['eta_date'].min().strftime('%Y-%m-%d %H:%M:%S')} hingga {daily_df['eta_date'].max().strftime('%Y-%m-%d %H:%M:%S')}",
+        "total_days": int(len(daily_df)),
+        "total_planned_shipment_ton": round(float(daily_df['planned_volume_ton'].sum()), 2),
+        "avg_loading_efficiency": round(float(daily_df['loading_efficiency'].mean()), 2),
+        "total_demurrage_cost_usd": round(float(daily_df['predicted_demurrage_cost'].sum()), 2),
+        "high_risk_days": int((daily_df['loading_efficiency'] < 0.5).sum()),  # Contoh threshold
+        "weather_summary": {
+            "max_wind_speed_kmh": round(float(daily_df['wind_speed_kmh'].max()), 1),
+            "high_wind_days": int((daily_df['wind_speed_kmh'] > 30).sum())
+        }
+    }
+    
+    # 3 strategi yang sama
+    strategies = [
+        {"id": 1, "name": "Conservative Plan", "multiplier": 0.85, "description": "Minimalkan biaya demurrage dan keterlambatan akibat cuaca"},
+        {"id": 2, "name": "Balanced Plan", "multiplier": 1.00, "description": "Optimalkan revenue sambil mengelola risiko demurrage dan cuaca"},
+        {"id": 3, "name": "Aggressive Plan", "multiplier": 1.10, "description": "Maksimalkan revenue pengiriman dan utilisasi kapal"}
+    ]
+    
+    recommendations = []
+    
+    for s in strategies:
+        optimized_schedule = []
+        baseline_total_revenue = 0
+        optimized_total_revenue = 0
+        demurrage_savings = 0
+        
+        for i, (_, row) in enumerate(daily_df.iterrows(), 1):
+            original_ton = row['planned_volume_ton']
+            
+            # Hitung adjusted ton berdasarkan strategi dan kondisi
+            if "Conservative" in s['name']:
+                if row['wind_speed_kmh'] > 25:
+                    adjusted_ton = original_ton * 0.85
+                    rationale = "Kurangi volume 15% karena risiko cuaca/demurrage"
+                else:
+                    adjusted_ton = original_ton * 0.95
+                    rationale = "Operasi pengiriman normal dengan pendekatan hati-hati"
+            
+            elif "Aggressive" in s['name']:
+                if row['loading_efficiency'] < 0.5:
+                    adjusted_ton = original_ton * 0.935  # Kurangi 6.5%
+                    rationale = "Kurangi volume 15% pada kondisi tidak optimal"
+                else:
+                    adjusted_ton = original_ton * 1.10
+                    rationale = "Operasi pengiriman maksimal untuk capai target tinggi"
+            
+            else:  # Balanced Plan
+                if row['wind_speed_kmh'] > 25 or row['loading_efficiency'] < 0.6:
+                    adjusted_ton = original_ton * 0.85
+                    rationale = "Kurangi volume 15% untuk antisipasi risiko"
+                else:
+                    adjusted_ton = original_ton
+                    rationale = "Operasi pengiriman normal sesuai rencana"
+            
+            # Hitung revenue (contoh: $65 per ton)
+            baseline_revenue = original_ton * 65
+            optimized_revenue = adjusted_ton * 65
+            
+            # Hitung penghematan demurrage (proporsional dengan pengurangan volume)
+            demurrage_saving = row['predicted_demurrage_cost'] * (1 - (adjusted_ton / original_ton))
+            
+            baseline_total_revenue += baseline_revenue
+            optimized_total_revenue += optimized_revenue
+            demurrage_savings += demurrage_saving
+            
+            optimized_schedule.append({
+                "date": row['eta_date'].strftime('%Y-%m-%d %H:%M:%S'),
+                "day": i,
+                "original_shipping_ton": round(original_ton, 0),
+                "optimized_shipping_ton": round(adjusted_ton, 0),
+                "adjustment_pct": round(((adjusted_ton - original_ton) / original_ton * 100), 2),
+                "baseline_revenue_usd": round(baseline_revenue, 2),
+                "optimized_revenue_usd": round(optimized_revenue, 2),
+                "demurrage_cost_usd": round(row['predicted_demurrage_cost'], 2),
+                "confidence_score": round(row['confidence_score'], 2),
+                "weather_condition": f"Angin: {round(row['wind_speed_kmh'], 1)}km/j",
+                "rationale": rationale
+            })
+        
+        # Hitung financial impact
+        financial_impact = {
+            "baseline_total_revenue_usd": round(baseline_total_revenue, 2),
+            "optimized_total_revenue_usd": round(optimized_total_revenue, 2),
+            "revenue_change_usd": round(optimized_total_revenue - baseline_total_revenue, 2),
+            "demurrage_savings_usd": round(demurrage_savings, 2),
+            "avg_risk_score": round(1 - (daily_df['loading_efficiency'].mean()), 2)
+        }
+        
+        # Buat plan object
+        plan_obj = {
+            "plan_id": s['id'],
+            "plan_name": s['name'],
+            "strategy_description": s['description'],
+            "optimized_schedule": optimized_schedule,
+            "financial_impact": financial_impact,
+            "implementation_steps": self._generate_shipping_steps(s['name']),
+            "strengths": self._generate_shipping_strengths(s['name'], financial_impact),
+            "limitations": self._generate_shipping_limitations(s['name'], financial_impact),
+            "justification": self._generate_shipping_justification(plan_obj, config)
+        }
+        
+        recommendations.append(plan_obj)
+    
     return {
         "plan_type": "RENCANA OPTIMASI PENGIRIMAN",
         "generated_at": datetime.now().isoformat(),
