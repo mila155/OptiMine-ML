@@ -186,15 +186,14 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
                 target_date=row["plan_date"]
             )
             weather_data.append(w)
+        
+        weather_cols = ["temp_day", "wind_speed_kmh", "precipitation_mm", "cloud_cover_pct"]
 
-        weather_df = pd.DataFrame(weather_data)
-        for col in ["temp_day", "wind_speed_kmh", "precipitation_mm", "cloud_cover_pct"]:
-            weather_df[col] = weather_df[col].apply(
-                lambda x: x[0] if isinstance(x, list) else x
-            )
+        for col in weather_cols:
+            if col in result_df.columns:
+                result_df = result_df.drop(columns=[col])
+                
         result_df = pd.concat([result_df.reset_index(drop=True), weather_df], axis=1)
-        print("DEBUG COLUMNS:", result_df.columns.tolist())
-        return {"columns": result_df.columns.tolist()}
 
         total_planned = result_df['planned_production_ton'].sum()
         total_predicted = result_df['predicted_production_ton'].sum()
