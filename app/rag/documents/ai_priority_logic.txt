@@ -1,0 +1,18 @@
+AI Priority Score is predicted using:
+- Planned Production
+- Hauling Distance
+- Human Priority Score
+- Weather factors
+
+Scores:
+- High     → 2
+- Medium   → 1
+- Low      → 0
+
+Rules:
+1. High human priority usually remains high unless weather severely degrades.
+2. Long distance + bad weather → downgrade priority.
+3. High rainfall in pit area → reduce priority.
+4. Efficiency < 0.7 → downgrade priority.
+
+AI Priority assists in sequencing pit operations and resource allocation.
