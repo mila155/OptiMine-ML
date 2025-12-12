@@ -1,58 +1,90 @@
-# app/rag/vectorstore.py
 import os
 import numpy as np
-
-try:
-    from sentence_transformers import SentenceTransformer # type: ignore
-    import faiss # type: ignore
-except Exception as e:
-    # If packages missing, raise a clear error when imported
-    raise ImportError("Missing RAG deps: install sentence-transformers and faiss-cpu. Error: " + str(e))
+from sklearn.neighbors import NearestNeighbors
+from transformers import AutoTokenizer, AutoModel
+import torch
 
 class VectorStore:
-    def __init__(self, docs_path: str):
+    def __init__(self, docs_path: str, model_name="intfloat/e5-small"):
         self.docs_path = docs_path
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
-        self.index = None
+        self.model_name = model_name
+
+        # Load HF model
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
+
         self.text_chunks = []
         self.embeddings = None
+        self.index = None
+        self.sources = []
 
+    # -----------------------------
+    # LOAD DOCS
+    # -----------------------------
     def load_documents(self):
         docs = []
         for fname in sorted(os.listdir(self.docs_path)):
             if fname.endswith(".txt"):
                 with open(os.path.join(self.docs_path, fname), "r", encoding="utf-8") as f:
                     text = f.read().strip()
-                    # split on paragraphs/lines for finer granularity
                     for part in text.split("\n"):
-                        text_chunk = part.strip()
-                        if len(text_chunk) > 10:
-                            docs.append({"source": fname, "text": text_chunk})
+                        chunk = part.strip()
+                        if len(chunk) > 10:
+                            docs.append({"source": fname, "text": chunk})
         return docs
 
+    # -----------------------------
+    # ENCODER
+    # -----------------------------
+    def encode(self, texts):
+        if isinstance(texts, str):
+            texts = [texts]
+
+        inputs = self.tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        # Mean pooling
+        emb = outputs.last_hidden_state.mean(dim=1)
+
+        return emb.cpu().numpy()
+
+    # -----------------------------
+    # BUILD VECTOR STORE
+    # -----------------------------
     def build(self):
         docs = self.load_documents()
         self.text_chunks = [d["text"] for d in docs]
-        if not self.text_chunks:
-            raise RuntimeError("No documents found to build vector store in: " + self.docs_path)
-
-        self.embeddings = np.array(self.model.encode(self.text_chunks)).astype("float32")
-        dim = self.embeddings.shape[1]
-        self.index = faiss.IndexFlatL2(dim)
-        self.index.add(self.embeddings)
-        # store source mapping
         self.sources = [d["source"] for d in docs]
 
+        if not self.text_chunks:
+            raise RuntimeError("No documents found in: " + self.docs_path)
+
+        # Compute embeddings
+        self.embeddings = self.encode(self.text_chunks)
+
+        # Build sklearn NN index
+        self.index = NearestNeighbors(n_neighbors=5, metric="cosine")
+        self.index.fit(self.embeddings)
+
+        print("VectorStore (light) built successfully.")
+
+    # -----------------------------
+    # SEARCH
+    # -----------------------------
     def search(self, query: str, top_k: int = 5):
         if self.index is None:
-            raise RuntimeError("Vector index not built. Call build() first.")
-        q_emb = np.array(self.model.encode([query])).astype("float32")
-        D, I = self.index.search(q_emb, top_k)
+            raise RuntimeError("Index not built. Call build() first.")
+
+        q_emb = self.encode(query)
+
+        distances, indices = self.index.kneighbors(q_emb, n_neighbors=top_k)
+
         results = []
-        for idx in I[0]:
-            if idx >= 0 and idx < len(self.text_chunks):
-                results.append({
-                    "text": self.text_chunks[idx],
-                    "source": self.sources[idx]
-                })
+        for idx in indices[0]:
+            results.append({
+                "text": self.text_chunks[idx],
+                "source": self.sources[idx]
+            })
+
         return results
