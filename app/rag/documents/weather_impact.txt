@@ -1,0 +1,20 @@
+Weather affects mining, hauling, and shipping differently.
+
+MINING:
+- Rain > 20 mm → high risk, production drop
+- Cloud cover > 70% → moderate impact
+- Temperature extremes reduce efficiency slightly
+
+HAULING:
+- Rain increases road slipperiness → cycle delay
+- Wind minimal effect unless extreme
+
+SHIPPING:
+- Wind > 35 km/h → stop loading
+- Rain > 10 mm → reduce loading rate by 20–40%
+- Cloudy weather minor impact
+
+Weather Impact Levels:
+- MINIMAL
+- MODERATE
+- SIGNIFICANT
