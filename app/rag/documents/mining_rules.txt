@@ -1,6 +1,9 @@
 Mining production is influenced by:
 - Planned Production (ton/day)
 - Hauling Distance (km)
+- AI adjusted production (model output)
+- Efficiency factor (0–1)
+- Cycle delay (minutes)
 - Weather factors: precipitation, wind, cloud cover, temperature
 - Priority score (human + AI)
 - Equipment availability and operational efficiency
