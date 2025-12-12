@@ -1,5 +1,5 @@
-import pandas as pd
 import io
+import pandas as pd
 from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -7,10 +7,11 @@ from datetime import datetime
 from typing import List
 from app.services.prediction import PredictionService
 import os
-from app.services.llm_service import LLMService
-llm_service = LLMService()
+from pydantic import BaseModel
 from app.rag.retriever import RAGRetriever
-rag = RAGRetriever()
+from app.rag.vectorstore import VectorStore
+from .schemas import PredictionRequest, RAGQuery
+
 
 from app.schemas import (
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
@@ -37,6 +38,52 @@ app.add_middleware(
 models_dir = os.getenv("MODELS_DIR", "models")
 prediction_service = PredictionService(models_dir=models_dir)
 
+# ==================== RAG INITIALIZATION ====================
+
+DOCS_PATH = "app/rag/docs"    # Pastikan folder ini ADA
+
+try:
+    vector_store = VectorStore(DOCS_PATH)
+    vector_store.build()
+
+    retriever = RAGRetriever(vector_store)
+    print("RAG initialized successfully.")
+
+except Exception as e:
+    print("⚠️ Failed to initialize RAG:", e)
+    retriever = None
+
+
+# ==================== ROUTES ==========================
+
+@app.get("/")
+def home():
+    return {"message": "API is running successfully!"}
+
+
+@app.post("/predict")
+def predict(payload: PredictionRequest):
+    try:
+        prediction = prediction_service.predict(payload.features)
+        return {"prediction": prediction}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/rag/query")
+def rag_query(payload: RAGQuery):
+    if retriever is None:
+        raise HTTPException(status_code=500, detail="RAG system not initialized.")
+
+    try:
+        context = retriever.get_context(payload.query)
+        return {
+            "query": payload.query,
+            "context": context
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ==================== HEALTH CHECK ====================
 
 @app.get("/", tags=["Health"])
@@ -58,46 +105,29 @@ async def health_check():
         api_version="1.0.0"
     )
 
-# ==================== CHATBOT ====================
+# ==================== MINING ENDPOINTS ====================
 
-@app.post("/chat", tags=["Chatbot"])
-async def chat_with_rag(query: str):
-    """
-    Chatbot RAG untuk seluruh domain OptiMine:
-    - mining
-    - shipping
-    - hauling
-    - weather
-    - ML explanation
-    """
+@app.post("/mining/upload-csv", tags=["Mining"])
+async def upload_csv_for_mining(file: UploadFile = File(...)):
     try:
-        context = rag.retrieve(query, top_k=5)
+        contents = await file.read()
 
-        prompt = f"""
-        Anda adalah AI assistant untuk sistem OptiMine.
-        Jawab pertanyaan user menggunakan konteks berikut:
+        df = pd.read_csv(
+            io.BytesIO(contents)
+        )
 
-        ==== KNOWLEDGE BASE ====
-        {context}
+        records = df.to_dict(orient="records")
 
-        ==== USER QUESTION ====
-        {query}
+        result_df = prediction_service.predict_mining(records)
 
-        Jawab dengan jelas, ringkas, dan berbasis data.
-        """
-
-        answer = llm.ask(prompt)
-
-        return {
-            "query": query,
-            "answer": answer,
-            "context_used": context,
-        }
+        return result_df.to_dict(orient="records")
 
     except Exception as e:
-        return {"error": str(e)}
-        
-# ==================== MINING ENDPOINTS ====================
+        raise HTTPException(
+            status_code=500,
+            detail=f"CSV processing failed: {str(e)}"
+        )
+
 
 @app.post("/mining/predict", response_model=List[MiningPredictionOutput], tags=["Mining"])
 async def predict_mining_single(plan: MiningPlanInput):
@@ -190,7 +220,6 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
                 'risk_level': lambda x: x.mode()[0] if len(x.mode()) > 0 else 'UNKNOWN'
             }).reset_index().to_dict('records')
         }
-        summary["ai_summary"] = llm_service.summarize_mining(summary)
         
         return MiningSummaryOutput(**summary)
         
@@ -292,7 +321,6 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             "route_recommendations": {},
             "ai_summary": None
         }
-        summary["ai_summary"] = llm_service.summarize_shipping(summary)
 
         return ShippingSummaryOutput(**summary)
 

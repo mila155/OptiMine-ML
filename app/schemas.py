@@ -158,6 +158,15 @@ class HealthCheck(BaseModel):
     models_loaded: Dict[str, bool]
     api_version: str
 
+# ==================== RAG QUERY ====================
+
+class PredictionRequest(BaseModel):
+    features: list
+
+class RAGQuery(BaseModel):
+    query: str
+
+
 # ==================== ERROR RESPONSE ====================
 
 class ErrorResponse(BaseModel):
