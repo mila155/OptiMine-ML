@@ -51,14 +51,20 @@ class MiningPredictionOutput(BaseModel):
     weather_impact: str
 
 class MiningSummaryOutput(BaseModel):
+    role: str
+    focus: str
     period: str
     total_days: int
     total_planned_production_ton: float
     total_predicted_production_ton: float
+    production_gap_pct: float
     avg_efficiency: float
+    avg_hauling_distance: float
+    avg_rain: float
+    max_wind: float
     high_risk_days: int
     daily_summary: List[Dict[str, Any]]
-    ai_summary: Optional[str] = None
+    ai_summary: Optional[str]
 
 # ==================== SHIPPING SCHEMAS ====================
 
