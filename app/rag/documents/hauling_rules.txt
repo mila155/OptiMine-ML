@@ -1,0 +1,28 @@
+Hauling connects PIT → ROM → Jetty.
+
+Key parameters:
+- Hauling distance (km)
+- Volume hauled (tons)
+- Number of trucks required
+- Fuel cost
+- Travel time (distance / avg speed)
+- ROM and jetty assignments
+
+Rules:
+1. Longer distance → higher cycle delay.
+2. Wet conditions increase haul duration.
+3. Fuel cost = distance * volume * fuel_rate_per_km.
+4. Jetty congestion increases queue time.
+5. Mismatch between hauling and shipping creates bottlenecks.
+
+Daily summary fields include:
+- active ROMs
+- trucks required
+- hauling distance
+- fuel cost
+- jetty demand
+
+Hauling Planner focus:
+- Ensure ROM stock meets vessel loading needs.
+- Reduce fuel cost.
+- Reduce congestion at ROMs and jetties.
