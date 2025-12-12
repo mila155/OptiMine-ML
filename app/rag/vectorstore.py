@@ -29,7 +29,7 @@ class VectorStore:
         docs = []
         for fname in sorted(os.listdir(self.docs_path)):
             if fname.endswith(".txt"):
-               with open(os.path.join(self.docs_path, fname), "r", encoding="utf-8") as f:
+                with open(os.path.join(self.docs_path, fname), "r", encoding="utf-8") as f:
                     full = f.read().strip()
                 for chunk in self._chunk_text(full):
                     docs.append({"source": fname, "text": chunk})
