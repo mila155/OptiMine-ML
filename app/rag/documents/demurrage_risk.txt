@@ -1,0 +1,17 @@
+Demurrage = penalty when vessel waits too long.
+
+Factors:
+- Predicted loading hours
+- Weather-related downtime
+- ROM supply delays
+- Jetty congestion
+
+Risk Levels:
+- HIGH → cost > $50,000
+- MEDIUM → $20,000–50,000
+- LOW → < $20,000
+
+Shipping Planner must proactively:
+- Reassign vessels
+- Increase hauling supply
+- Adjust loading slots
