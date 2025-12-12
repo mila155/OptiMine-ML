@@ -748,6 +748,121 @@ Direkomendasikan untuk operasi harian dengan fluktuasi kondisi yang dapat dipred
 # Top3 Mining generator - PATCHED
 # -------------------------
 def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
+    print(f"🚀 START generate_top3_mining_plans with {len(predictions)} rows")
+    
+    try:
+        df = predictions.copy()
+        print(f"📊 Data shape: {df.shape}")
+        print(f"📊 Columns: {df.columns.tolist()}")
+        
+        df['plan_date'] = pd.to_datetime(df['plan_date']) if 'plan_date' in df.columns else pd.date_range(start=datetime.now().date(), periods=len(df))
+        print(f"📅 Processed dates: {df['plan_date'].tolist()}")
+        
+        # Buat executive summary
+        executive_summary = _make_executive_summary_mining(df)
+        print(f"📈 Executive summary: {executive_summary}")
+        
+        strategies = [
+            {"id": 1, "name": "Conservative Plan", "prod_multiplier": 0.90, "risk_threshold": 0.7, "description": "Meminimalkan risiko operasional akibat cuaca dan keterlambatan"},
+            {"id": 2, "name": "Balanced Plan", "prod_multiplier": 1.00, "risk_threshold": 0.6, "description": "Menyeimbangkan target produksi dengan pengelolaan risiko yang efektif"},
+            {"id": 3, "name": "Aggressive Plan", "prod_multiplier": 1.10, "risk_threshold": 0.5, "description": "Memaksimalkan volume produksi untuk memenuhi permintaan tinggi"}
+        ]
+        
+        recommendations = []
+        
+        for s in strategies:
+            print(f"🔄 Processing strategy: {s['name']}")
+            
+            optimized_schedule = []
+            total_baseline_cost = 0.0
+            total_optimized_cost = 0.0
+            total_risk_score = 0.0
+            
+            for idx, row in df.iterrows():
+                # Get confidence from available columns
+                conf_items = []
+                for col in ['efficiency_factor', 'confidence_score', 'ai_priority_score']:
+                    if col in row and not pd.isna(row[col]):
+                        conf_items.append(float(row[col]))
+                
+                overall_conf = float(np.mean(conf_items)) if conf_items else 0.6
+                
+                # Apply multiplier based on risk threshold
+                adj_multiplier = s['prod_multiplier']
+                if overall_conf < s['risk_threshold']:
+                    adj_multiplier *= 0.8
+                
+                original_prod = float(row.get('planned_production_ton', 0.0))
+                adjusted_prod = round(original_prod * adj_multiplier, 0)
+                
+                # Cost calculation
+                baseline_cost = original_prod * 30.0
+                optimized_cost = adjusted_prod * 30.0
+                total_baseline_cost += baseline_cost
+                total_optimized_cost += optimized_cost
+                total_risk_score += (1.0 - overall_conf)
+                
+                optimized_schedule.append({
+                    "date": str(row['plan_date'].date()),
+                    "plan_id": row.get('plan_id', f"MP{idx+1:03d}"),
+                    "original_production_ton": int(original_prod),
+                    "optimized_production_ton": int(adjusted_prod),
+                    "adjustment_pct": round(((adjusted_prod - original_prod) / original_prod * 100) if original_prod > 0 else 0, 2),
+                    "baseline_cost_usd": round(float(baseline_cost), 2),
+                    "optimized_cost_usd": round(float(optimized_cost), 2),
+                    "confidence_score": round(overall_conf, 2),
+                    "weather_condition": f"Hujan (avg): {row.get('avg_rain_mm', 0)}mm, Angin (max): {row.get('max_wind_kmh', 0)}km/h",
+                    "rationale": f"{s['name']}: {'Reduced due to risk' if overall_conf < s['risk_threshold'] else 'Operating normally'}"
+                })
+            
+            financial_impact = {
+                "baseline_total_cost_usd": round(total_baseline_cost, 2),
+                "optimized_total_cost_usd": round(total_optimized_cost, 2),
+                "cost_savings_usd": round(total_baseline_cost - total_optimized_cost, 2),
+                "avg_risk_score": round(total_risk_score / len(df), 2) if len(df) > 0 else 0.0
+            }
+            
+            print(f"💰 Financial impact for {s['name']}: {financial_impact}")
+            
+            # Build plan object with SAFE fallbacks
+            plan_obj = {
+                "plan_id": s['id'],
+                "plan_name": s['name'],
+                "strategy_description": s['description'],
+                "optimized_schedule": optimized_schedule,
+                "financial_impact": financial_impact,
+                "implementation_steps": _get_safe_implementation_steps(s['name']),
+                "strengths": _get_safe_strengths(s['name'], financial_impact, len(optimized_schedule)),
+                "limitations": _get_safe_limitations(s['name'], financial_impact),
+                "justification": _get_safe_justification(s['name'], financial_impact, optimized_schedule)
+            }
+            
+            recommendations.append(plan_obj)
+            print(f"✅ Completed {s['name']}")
+        
+        result = {
+            "plan_type": "RENCANA OPTIMASI PERTAMBANGAN",
+            "generated_at": datetime.now().isoformat(),
+            "executive_summary": executive_summary,
+            "recommendations": recommendations
+        }
+        
+        print(f"🎉 FINISHED: Generated {len(recommendations)} recommendations")
+        return result
+        
+    except Exception as e:
+        print(f"🔥 CRITICAL ERROR in generate_top3_mining_plans: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return minimal safe result
+        return {
+            "plan_type": "RENCANA OPTIMASI PERTAMBANGAN",
+            "generated_at": datetime.now().isoformat(),
+            "error": f"Error generating plans: {str(e)}",
+            "executive_summary": {},
+            "recommendations": []
+        }   
     df = predictions.copy()
     df['plan_date'] = pd.to_datetime(df['plan_date']) if 'plan_date' in df.columns else pd.date_range(start=datetime.now().date(), periods=len(df))
     
@@ -864,6 +979,90 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
             plan_obj['justification'] = _generate_detailed_manual_justification(plan_obj)
 
 
+def _get_safe_implementation_steps(plan_name: str) -> List[str]:
+    """Safe implementation steps without any external dependencies"""
+    if "Conservative" in plan_name:
+        return [
+            "Kurangi target produksi pada hari dengan confidence rendah",
+            "Prioritaskan maintenance dan safety check",
+            "Monitor kondisi cuaca real-time",
+            "Siapkan backup equipment"
+        ]
+    elif "Aggressive" in plan_name:
+        return [
+            "Tingkatkan shift operasional",
+            "Optimalkan routing hauling",
+            "Perpanjang jam operasional",
+            "Monitor equipment health"
+        ]
+    else:  # Balanced
+        return [
+            "Implementasikan sesuai jadwal baseline",
+            "Monitor KPIs harian",
+            "Adjust berdasarkan kondisi aktual",
+            "Koordinasi maintenance team"
+        ]
+
+def _get_safe_strengths(plan_name: str, financial_impact: Dict, total_days: int) -> List[str]:
+    """Safe strengths without any external dependencies"""
+    strengths = []
+    savings = financial_impact.get('cost_savings_usd', 0)
+    risk_score = financial_impact.get('avg_risk_score', 0.5)
+    
+    if "Conservative" in plan_name:
+        strengths.append("Fokus pada mitigasi risiko dan stabilitas")
+        if savings > 0:
+            strengths.append(f"Penghematan: ${savings:,.0f}")
+        strengths.append("Mengurangi ketergantungan kondisi cuaca")
+    elif "Aggressive" in plan_name:
+        strengths.append("Maksimalisasi output produksi")
+        strengths.append("Pemanfaatan optimal kapasitas")
+        if savings < 0:
+            strengths.append(f"Investasi: ${abs(savings):,.0f}")
+    else:  # Balanced
+        strengths.append("Keseimbangan optimal")
+        strengths.append("Fleksibilitas operasional")
+    
+    strengths.append(f"Analisis {total_days} hari")
+    strengths.append(f"Risiko: {risk_score:.2f}")
+    return strengths
+
+def _get_safe_limitations(plan_name: str, financial_impact: Dict) -> List[str]:
+    """Safe limitations without any external dependencies"""
+    limitations = []
+    risk_score = financial_impact.get('avg_risk_score', 0.5)
+    
+    if "Conservative" in plan_name:
+        limitations.append("Produktivitas lebih rendah")
+        limitations.append("Potensi underutilization")
+    elif "Aggressive" in plan_name:
+        limitations.append(f"Risiko lebih tinggi ({risk_score:.2f})")
+        limitations.append("Biaya operasional meningkat")
+    else:  # Balanced
+        limitations.append("Perlu monitoring intensif")
+        limitations.append("Margin tidak dimaksimalkan")
+    
+    limitations.append("Model biaya dasar ($30/ton)")
+    return limitations
+
+def _get_safe_justification(plan_name: str, financial_impact: Dict, schedule: List[Dict]) -> str:
+    """Safe justification without any external dependencies"""
+    total_days = len(schedule)
+    savings = financial_impact.get('cost_savings_usd', 0)
+    risk_score = financial_impact.get('avg_risk_score', 0.5)
+    
+    if schedule:
+        avg_adjustment = np.mean([d.get('adjustment_pct', 0) for d in schedule])
+    else:
+        avg_adjustment = 0
+    
+    if "Conservative" in plan_name:
+        return f"Rencana konservatif ({total_days} hari) mengurangi target {abs(avg_adjustment):.1f}% untuk mitigasi risiko. Penghematan: ${savings:,.0f}. Risiko: {risk_score:.2f}."
+    elif "Aggressive" in plan_name:
+        return f"Rencana agresif ({total_days} hari) meningkatkan target {avg_adjustment:.1f}% untuk pencapaian maksimal. Investasi: ${abs(savings):,.0f}. Risiko: {risk_score:.2f}."
+    else:
+        return f"Rencana seimbang ({total_days} hari) menjaga target dengan penyesuaian dinamis. Risiko: {risk_score:.2f}."
+    
 # -------------------------
 # Top3 Shipping generator - FIXED
 # -------------------------
