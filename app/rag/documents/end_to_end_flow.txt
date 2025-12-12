@@ -1,0 +1,21 @@
+Flow:
+PIT → ROM → Hauling → Jetty → Vessel Loading
+
+Mining → Hauling → Shipping must stay balanced.
+
+Rules:
+1. Production < shipping demand → deficit → demurrage risk.
+2. Production > shipping → stockpile overflow.
+3. High-risk days require rescheduling.
+4. Manager focuses on:
+   - Profit
+   - Cost (mining+hauling+demurrage)
+   - Efficiency and delays
+   - Weather disruptions
+   - Resource allocation
+
+Executives expect:
+- concise daily summary
+- bottleneck identification
+- risk scoring
+- recommendations for optimization
