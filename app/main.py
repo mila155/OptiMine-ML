@@ -186,7 +186,13 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
                 target_date=row["plan_date"]
             )
             weather_data.append(w)
-        
+            
+        weather_df = pd.DataFrame(weather_data)
+        for col in ["temp_day", "wind_speed_kmh", "precipitation_mm", "cloud_cover_pct"]:
+            weather_df[col] = weather_df[col].apply(
+                lambda x: x[0] if isinstance(x, list) else x
+            )
+            
         weather_cols = ["temp_day", "wind_speed_kmh", "precipitation_mm", "cloud_cover_pct"]
 
         for col in weather_cols:
