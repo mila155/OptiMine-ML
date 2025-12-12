@@ -1,3 +1,7 @@
+from app.rag.retriever import RAGRetriever
+from app.rag.vectorstore import VectorStore
+
+
 class RAGEngineSafe:
     """
     RAG Engine Safe:
@@ -29,4 +33,4 @@ class RAGEngineSafe:
                 return ctx or "Tidak ada konteks tersedia"
         except Exception:
             pass
-        return "Tidak ada konteks tersedia"  
+        return "Tidak ada konteks tersedia"  # fallback aman
