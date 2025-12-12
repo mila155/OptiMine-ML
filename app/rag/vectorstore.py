@@ -12,7 +12,7 @@ class VectorStore:
 
     def embed_text(self, text: str):
         resp = self.client.embeddings.create(
-            model="llama-3.3-70b-versatile",
+            model="text-embedding-3-large",
             input=text
         )
         return np.array(resp.data[0].embedding)
