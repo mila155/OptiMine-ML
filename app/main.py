@@ -10,6 +10,7 @@ import os
 from pydantic import BaseModel
 from app.services.llm_service import LLMService
 llm_service = LLMService()
+from app.rag.vectorstore import VectorStore
 from app.rag.retriever import RAGRetriever
 vs = VectorStore("app/rag/documents")
 vs.build()
