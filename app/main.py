@@ -15,6 +15,8 @@ from app.rag.vectorstore import VectorStore
 from app.rag.retriever import RAGRetriever
 from app.services.weather import WeatherService
 weather_service = WeatherService()
+from app.services.route_service import RouteService
+route_service = RouteService()
 
 vs = VectorStore("app/rag/documents")
 try:
@@ -330,24 +332,63 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 
         result_df = prediction_service.predict_shipping(data)
 
+        required_cols = ["rom_lat", "rom_lon", "jetty_lat", "jetty_lon"]
+        for col in required_cols:
+            if col not in result_df.columns:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Column '{col}' is missing in JSON input. "
+                           f"Backend web must send lat/lon for ROM and Jetty."
+                )
+            result_df[col] = pd.to_numeric(result_df[col], errors="coerce")
+
+        route_recommendations = {}
+
+        for _, row in result_df.iterrows():
+            r = route_service.compute_route(
+                row["rom_lat"], row["rom_lon"],
+                row["jetty_lat"], row["jetty_lon"]
+            )
+
+            route_recommendations[row["shipment_id"]] = {
+                "rom_id": row["rom_id"],
+                "jetty_id": row["jetty_id"],
+                "rom_coordinates": {
+                    "lat": row["rom_lat"],
+                    "lon": row["rom_lon"]
+                },
+                "jetty_coordinates": {
+                    "lat": row["jetty_lat"],
+                    "lon": row["jetty_lon"]
+                },
+                "distance_km": r["distance_km"],
+                "duration_min": r["duration_min"]
+            }
+
         summary = {
             "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
-            "total_days": len(result_df['eta_date'].unique()),
-            "total_volume_ton": float(result_df['planned_volume_ton'].sum()),
+            "total_days": len(result_df["eta_date"].unique()),
+            "total_volume_ton": float(result_df["planned_volume_ton"].sum()),
             "total_vessels": len(result_df),
-            "total_demurrage_cost": float(result_df['predicted_demurrage_cost'].sum()),
-            "avg_loading_efficiency": float(result_df['loading_efficiency'].mean()),
-            "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),
-            "daily_summary": result_df.groupby('eta_date').agg({
-                'planned_volume_ton': 'sum',
-                'predicted_loading_hours': 'mean',
-                'loading_efficiency': 'mean',
-                'risk_level': lambda x: x.mode()[0] if len(x.mode()) > 0 else "UNKNOWN"
-            }).reset_index().to_dict('records'),
-            "route_recommendations": {},
-            "ai_summary": None
+            "total_demurrage_cost": float(result_df["predicted_demurrage_cost"].sum()),
+            "avg_loading_efficiency": float(result_df["loading_efficiency"].mean()),
+            "high_risk_days": int((result_df["risk_level"] == "HIGH").sum()),
         }
+
+        daily_summary = (
+            result_df.groupby("eta_date")
+            .agg({
+                "planned_volume_ton": "sum",
+                "predicted_loading_hours": "mean",
+                "loading_efficiency": "mean",
+                "risk_level": lambda x: x.mode()[0] if len(x.mode()) else "UNKNOWN"
+            })
+            .reset_index()
+        ).to_dict("records")
+
+        summary["daily_summary"] = daily_summary
         summary["ai_summary"] = llm_service.summarize_shipping(summary)
+        summary["route_recommendations"] = route_recommendations
 
         return ShippingSummaryOutput(**summary)
 
