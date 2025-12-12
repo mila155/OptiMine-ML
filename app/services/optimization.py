@@ -380,7 +380,7 @@ def _make_executive_summary_shipping(df: pd.DataFrame) -> Dict[str, Any]:
     }                                                                                                                                                                                                                                                                                           
 
 # -------------------------
-# Shipping helper functions
+# Shipping helper functions - FIXED VERSION
 # -------------------------
 def _generate_shipping_steps(plan_name: str) -> List[str]:
     """Generate implementation steps for shipping plans"""
@@ -461,20 +461,47 @@ def _generate_shipping_limitations(plan_name: str, financial_impact: Dict) -> Li
     ])
 
 def _generate_shipping_justification(plan_data: Dict[str, Any]) -> str:
-    """Manual fallback justification for shipping"""
+    """Manual fallback justification for shipping - FIXED DETAILED VERSION"""
     plan_name = plan_data.get('plan_name', '')
-    savings = plan_data.get('financial_impact', {}).get('demurrage_savings_usd', 0)
-    revenue_change = plan_data.get('financial_impact', {}).get('revenue_change_usd', 0)
+    financial = plan_data.get('financial_impact', {})
+    savings = financial.get('demurrage_savings_usd', 0)
+    revenue_change = financial.get('revenue_change_usd', 0)
+    baseline_rev = financial.get('baseline_total_revenue_usd', 0)
+    optimized_rev = financial.get('optimized_total_revenue_usd', 0)
+    risk_score = financial.get('avg_risk_score', 0)
+    
+    # Ambil data schedule untuk informasi cuaca
+    schedule = plan_data.get('optimized_schedule', [])
+    if schedule:
+        total_days = len(schedule)
+        high_wind_days = sum(1 for s in schedule if "Angin:" in s.get('weather_condition', '') and float(s['weather_condition'].split(':')[1].replace('km/j', '').strip()) > 25)
+    else:
+        total_days = 0
+        high_wind_days = 0
     
     if "Conservative" in plan_name:
-        return f"Rencana konservatif berfokus pada minimisasi biaya demurrage dan risiko keterlambatan. {'Menghasilkan penghematan demurrage.' if savings > 0 else 'Menjaga stabilitas operasional.'}"
+        return f"""Rencana konservatif berfokus pada minimisasi biaya demurrage dan risiko keterlambatan akibat cuaca. 
+Strategi ini mengurangi target loading pada hari dengan angin kencang (>25 km/jam) untuk menghindari penalti demurrage yang tinggi.
+Dari {total_days} hari operasi, terdapat {high_wind_days} hari dengan kondisi angin di atas ambang batas normal.
+Dengan pendekatan ini, revenue turun sebesar ${abs(revenue_change):,.0f} dari baseline ${baseline_rev:,.0f} menjadi ${optimized_rev:,.0f}, namun biaya demurrage dapat dihemat sebesar ${savings:,.0f}.
+Rencana ini cocok untuk kondisi cuaca tidak menentu atau ketika stabilitas operasional lebih diprioritaskan daripada pencapaian target maksimal. Skor risiko rata-rata {risk_score:.2f} menunjukkan tingkat risiko yang dapat dikelola."""
+    
     elif "Aggressive" in plan_name:
-        return f"Rencana agresif memaksimalkan volume pengiriman untuk mencapai target revenue tinggi. {'Meningkatkan revenue secara signifikan.' if revenue_change > 0 else 'Fokus pada utilisasi kapasitas maksimal.'}"
-    else:
-        return f"Rencana seimbang menjaga keseimbangan antara target revenue dan manajemen risiko demurrage."
+        return f"""Rencana agresif memaksimalkan volume pengiriman untuk mencapai target revenue tertinggi.
+Strategi ini meningkatkan target loading hingga 10% pada hari optimal dan memperpanjang jam operasional untuk memaksimalkan throughput.
+Revenue meningkat sebesar ${revenue_change:,.0f} dari baseline ${baseline_rev:,.0f} menjadi ${optimized_rev:,.0f}, dengan penghematan demurrage sebesar ${savings:,.0f}.
+Dari {total_days} hari operasi, terdapat {high_wind_days} hari dengan kondisi angin di atas ambang batas normal yang memerlukan penyesuaian jadwal.
+Rencana ini cocok untuk memanfaatkan permintaan pasar tinggi dengan menerima risiko demurrage moderat sebesar {risk_score:.2f} pada skala 0-1."""
+    
+    else:  # Balanced Plan
+        return f"""Rencana seimbang menjaga keseimbangan antara pencapaian target revenue dan manajemen risiko demurrage.
+Strategi ini mempertahankan volume pengiriman sesuai rencana dengan penyesuaian minor hanya pada kondisi cuaca ekstrem.
+Revenue berubah sebesar ${revenue_change:,.0f} dari baseline ${baseline_rev:,.0f} menjadi ${optimized_rev:,.0f}, dengan penghematan demurrage ${savings:,.0f}.
+Dari {total_days} hari operasi, operasi pengiriman tetap berjalan dengan efisiensi yang terjaga meskipun terdapat {high_wind_days} hari dengan kondisi angin di atas ambang batas.
+Pendekatan ini ideal untuk operasi rutin dengan monitoring real-time dan fleksibilitas penjadwalan dinamis, dengan skor risiko rata-rata {risk_score:.2f}."""
 
 # -------------------------
-# AI description helpers (use RAG context inside prompt)
+# AI description helpers (use RAG context inside prompt) - FIXED
 # -------------------------
 def generate_ai_description_mining(plan_data: Dict[str, Any], config: Dict[str, Any]) -> str:
     """Generate Indonesian description for mining using AI + RAG"""
@@ -520,7 +547,7 @@ Gunakan bahasa yang profesional namun mudah dipahami. Jangan gunakan format mark
         return _generate_manual_justification(plan_data)
 
 def _generate_manual_justification(plan_data: Dict[str, Any]) -> str:
-    """Manual fallback justification"""
+    """Manual fallback justification for mining"""
     plan_name = plan_data.get('plan_name', '')
     savings = plan_data.get('financial_impact', {}).get('cost_savings_usd', 0)
     
@@ -530,45 +557,26 @@ def _generate_manual_justification(plan_data: Dict[str, Any]) -> str:
         return f"Rencana agresif meningkatkan target produksi untuk memanfaatkan kondisi optimal dengan menerima risiko lebih tinggi. {'Potensi peningkatan revenue.' if savings < 0 else 'Fokus pada pencapaian target maksimal.'}"
     else:
         return f"Rencana seimbang menjaga target produksi sambil mengoptimalkan alokasi sumber daya dan manajemen risiko."
-    """Generate Indonesian description for mining using AI + RAG (safe fallback)."""
-    rag_context = _safe_get_context(plan_data.get('plan_name', ''), k=6)
-    prompt = f"""
-Gunakan konteks berikut sebagai referensi utama:
-{rag_context}
-
-Kamu adalah asisten AI yang membantu menjelaskan rencana optimasi pertambangan dalam Bahasa Indonesia.
-
-Berdasarkan data berikut:
-- Nama Plan: {plan_data.get('plan_name')}
-- Deskripsi Strategi: {plan_data.get('strategy_description')}
-- Baseline Cost: ${plan_data.get('financial_impact', {}).get('baseline_total_cost_usd', 0):,.0f}
-- Optimized Cost: ${plan_data.get('financial_impact', {}).get('optimized_total_cost_usd', 0):,.0f}
-- Cost Savings: ${plan_data.get('financial_impact', {}).get('cost_savings_usd', 0):,.0f}
-- Risk Score: {plan_data.get('financial_impact', {}).get('avg_risk_score', 0):.2f}
-- Kelebihan: {', '.join(plan_data.get('strengths', []))}
-- Keterbatasan: {', '.join(plan_data.get('limitations', []))}
-
-Buatlah penjelasan detail dalam Bahasa Indonesia yang natural dan mudah dipahami (3-4 paragraf) yang mencakup:
-1. Penjelasan singkat tentang rencana pertambangan ini dan tujuannya
-2. Bagaimana rencana ini mempengaruhi operasi pertambangan harian
-3. Analisis dampak finansial terhadap biaya dan potensi penghematan
-4. Mengapa rencana ini direkomendasikan untuk operasi tambang
-
-Gunakan bahasa yang profesional namun mudah dipahami. Jangan gunakan format markdown atau bullet points.
-"""
-    try:
-        return call_groq(prompt, config).strip()
-    except Exception as e:
-        return f"Penjelasan otomatis gagal: {str(e)}"
 
 def generate_ai_description_shipping(plan_data: Dict[str, Any], config: Dict[str, Any]) -> str:
-    """Generate Indonesian description for shipping using AI + RAG (safe fallback)."""
+    """Generate Indonesian description for shipping using AI + RAG"""
+    print(f"🔍 Generating AI description for shipping: {plan_data.get('plan_name')}")
+    
     rag_context = _safe_get_context(plan_data.get('plan_name', ''), k=6)
+    
+    # Format limitations for prompt
+    limitations_text = []
+    for lim in plan_data.get('limitations', []):
+        if isinstance(lim, dict):
+            limitations_text.append(f"{lim.get('keterbatasan', '')}: {lim.get('deskripsi', '')}")
+        else:
+            limitations_text.append(str(lim))
+    
     prompt = f"""
 Gunakan konteks berikut sebagai referensi utama:
 {rag_context}
 
-Kamu adalah asisten AI yang membantu menjelaskan rencana optimasi pengiriman dalam Bahasa Indonesia.
+Kamu adalah asisten AI yang membantu menjelaskan rencana optimasi pengiriman laut dalam Bahasa Indonesia.
 
 Berdasarkan data berikut:
 - Nama Plan: {plan_data.get('plan_name')}
@@ -579,20 +587,29 @@ Berdasarkan data berikut:
 - Demurrage Savings: ${plan_data.get('financial_impact', {}).get('demurrage_savings_usd', 0):,.0f}
 - Risk Score: {plan_data.get('financial_impact', {}).get('avg_risk_score', 0):.2f}
 - Kelebihan: {', '.join(plan_data.get('strengths', []))}
-- Keterbatasan: {', '.join(plan_data.get('limitations', []))}
+- Keterbatasan: {', '.join(limitations_text)}
 
 Buatlah penjelasan detail dalam Bahasa Indonesia yang natural dan mudah dipahami (3-4 paragraf) yang mencakup:
 1. Penjelasan singkat tentang rencana pengiriman ini dan tujuannya
-2. Bagaimana rencana ini mempengaruhi operasi pengiriman harian
+2. Bagaimana rencana ini mempengaruhi operasi pengiriman harian termasuk penanganan kondisi cuaca
 3. Analisis dampak finansial terhadap revenue dan penghematan demurrage
-4. Mengapa rencana ini direkomendasikan untuk operasi pelabuhan
+4. Mengapa rencana ini direkomendasikan untuk operasi pelabuhan dan shipping
 
 Gunakan bahasa yang profesional namun mudah dipahami. Jangan gunakan format markdown atau bullet points.
 """
     try:
-        return call_groq(prompt, config).strip()
+        print(f"📝 Prompt length: {len(prompt)}")
+        response = call_groq(prompt, config).strip()
+        print(f"✅ AI Response received: {response[:100]}...")
+        
+        if "gagal" in response.lower() or "error" in response.lower():
+            print(f"⚠️ AI returned error: {response}")
+            return _generate_shipping_justification(plan_data)
+            
+        return response
     except Exception as e:
-        return f"Penjelasan otomatis gagal: {str(e)}"
+        print(f"❌ Error in generate_ai_description_shipping: {e}")
+        return _generate_shipping_justification(plan_data)
 
 # -------------------------
 # Top3 Mining generator - PATCHED
@@ -684,7 +701,7 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
         try:
             plan_obj['justification'] = generate_ai_description_mining(plan_obj, config)
         except Exception:
-            plan_obj['justification'] = "AI justification fallback"
+            plan_obj['justification'] = _generate_manual_justification(plan_obj)
 
         recommendations.append(plan_obj)
 
@@ -696,9 +713,6 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
     }
 
 
-# -------------------------
-# Top3 Shipping generator - PATCHED
-# -------------------------
 # -------------------------
 # Top3 Shipping generator - FIXED
 # -------------------------
@@ -838,132 +852,6 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
         except Exception:
             plan_obj['justification'] = _generate_shipping_justification(plan_obj)
 
-        recommendations.append(plan_obj)
-    
-    return {
-        "plan_type": "RENCANA OPTIMASI PENGIRIMAN",
-        "generated_at": datetime.now().isoformat(),
-        "executive_summary": executive_summary,
-        "recommendations": recommendations
-    }
-    df = predictions.copy()
-    
-    # Pastikan kolom yang diperlukan ada
-    df['eta_date'] = pd.to_datetime(df['eta_date'])
-    
-    # Kelompokkan per hari jika ada multiple shipments per hari
-    daily_df = df.groupby('eta_date').agg({
-        'planned_volume_ton': 'sum',
-        'loading_efficiency': 'mean',
-        'predicted_demurrage_cost': 'sum',
-        'wind_speed_kmh': 'mean',
-        'confidence_score': 'mean'
-    }).reset_index()
-    
-    # Buat executive summary dengan weather summary
-    executive_summary = {
-        "period": f"{daily_df['eta_date'].min().strftime('%Y-%m-%d %H:%M:%S')} hingga {daily_df['eta_date'].max().strftime('%Y-%m-%d %H:%M:%S')}",
-        "total_days": int(len(daily_df)),
-        "total_planned_shipment_ton": round(float(daily_df['planned_volume_ton'].sum()), 2),
-        "avg_loading_efficiency": round(float(daily_df['loading_efficiency'].mean()), 2),
-        "total_demurrage_cost_usd": round(float(daily_df['predicted_demurrage_cost'].sum()), 2),
-        "high_risk_days": int((daily_df['loading_efficiency'] < 0.5).sum()),  # Contoh threshold
-        "weather_summary": {
-            "max_wind_speed_kmh": round(float(daily_df['wind_speed_kmh'].max()), 1),
-            "high_wind_days": int((daily_df['wind_speed_kmh'] > 30).sum())
-        }
-    }
-    
-    # 3 strategi yang sama
-    strategies = [
-        {"id": 1, "name": "Conservative Plan", "multiplier": 0.85, "description": "Minimalkan biaya demurrage dan keterlambatan akibat cuaca"},
-        {"id": 2, "name": "Balanced Plan", "multiplier": 1.00, "description": "Optimalkan revenue sambil mengelola risiko demurrage dan cuaca"},
-        {"id": 3, "name": "Aggressive Plan", "multiplier": 1.10, "description": "Maksimalkan revenue pengiriman dan utilisasi kapal"}
-    ]
-    
-    recommendations = []
-    
-    for s in strategies:
-        optimized_schedule = []
-        baseline_total_revenue = 0
-        optimized_total_revenue = 0
-        demurrage_savings = 0
-        
-        for i, (_, row) in enumerate(daily_df.iterrows(), 1):
-            original_ton = row['planned_volume_ton']
-            
-            # Hitung adjusted ton berdasarkan strategi dan kondisi
-            if "Conservative" in s['name']:
-                if row['wind_speed_kmh'] > 25:
-                    adjusted_ton = original_ton * 0.85
-                    rationale = "Kurangi volume 15% karena risiko cuaca/demurrage"
-                else:
-                    adjusted_ton = original_ton * 0.95
-                    rationale = "Operasi pengiriman normal dengan pendekatan hati-hati"
-            
-            elif "Aggressive" in s['name']:
-                if row['loading_efficiency'] < 0.5:
-                    adjusted_ton = original_ton * 0.935  # Kurangi 6.5%
-                    rationale = "Kurangi volume 15% pada kondisi tidak optimal"
-                else:
-                    adjusted_ton = original_ton * 1.10
-                    rationale = "Operasi pengiriman maksimal untuk capai target tinggi"
-            
-            else:  # Balanced Plan
-                if row['wind_speed_kmh'] > 25 or row['loading_efficiency'] < 0.6:
-                    adjusted_ton = original_ton * 0.85
-                    rationale = "Kurangi volume 15% untuk antisipasi risiko"
-                else:
-                    adjusted_ton = original_ton
-                    rationale = "Operasi pengiriman normal sesuai rencana"
-            
-            # Hitung revenue (contoh: $65 per ton)
-            baseline_revenue = original_ton * 65
-            optimized_revenue = adjusted_ton * 65
-            
-            # Hitung penghematan demurrage (proporsional dengan pengurangan volume)
-            demurrage_saving = row['predicted_demurrage_cost'] * (1 - (adjusted_ton / original_ton))
-            
-            baseline_total_revenue += baseline_revenue
-            optimized_total_revenue += optimized_revenue
-            demurrage_savings += demurrage_saving
-            
-            optimized_schedule.append({
-                "date": row['eta_date'].strftime('%Y-%m-%d %H:%M:%S'),
-                "day": i,
-                "original_shipping_ton": round(original_ton, 0),
-                "optimized_shipping_ton": round(adjusted_ton, 0),
-                "adjustment_pct": round(((adjusted_ton - original_ton) / original_ton * 100), 2),
-                "baseline_revenue_usd": round(baseline_revenue, 2),
-                "optimized_revenue_usd": round(optimized_revenue, 2),
-                "demurrage_cost_usd": round(row['predicted_demurrage_cost'], 2),
-                "confidence_score": round(row['confidence_score'], 2),
-                "weather_condition": f"Angin: {round(row['wind_speed_kmh'], 1)}km/j",
-                "rationale": rationale
-            })
-        
-        # Hitung financial impact
-        financial_impact = {
-            "baseline_total_revenue_usd": round(baseline_total_revenue, 2),
-            "optimized_total_revenue_usd": round(optimized_total_revenue, 2),
-            "revenue_change_usd": round(optimized_total_revenue - baseline_total_revenue, 2),
-            "demurrage_savings_usd": round(demurrage_savings, 2),
-            "avg_risk_score": round(1 - (daily_df['loading_efficiency'].mean()), 2)
-        }
-        
-        # Buat plan object
-        plan_obj = {
-            "plan_id": s['id'],
-            "plan_name": s['name'],
-            "strategy_description": s['description'],
-            "optimized_schedule": optimized_schedule,
-            "financial_impact": financial_impact,
-            "implementation_steps": self._generate_shipping_steps(s['name']),
-            "strengths": self._generate_shipping_strengths(s['name'], financial_impact),
-            "limitations": self._generate_shipping_limitations(s['name'], financial_impact),
-            "justification": self._generate_shipping_justification(plan_obj, config)
-        }
-        
         recommendations.append(plan_obj)
     
     return {
