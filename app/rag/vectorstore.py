@@ -1,16 +1,9 @@
 import os
 import numpy as np
 
-try:
-    from sentence_transformers import SentenceTransformer 
-    import faiss 
-except Exception as e:
-    raise ImportError("Missing RAG deps: install sentence-transformers and faiss-cpu. Error: " + str(e))
-
 class VectorStore:
     def __init__(self, docs_path: str):
         self.docs_path = docs_path
-        self.model = SentenceTransformer("all-MiniLM-L6-v2")
         self.index = None
         self.text_chunks = []
         self.embeddings = []
