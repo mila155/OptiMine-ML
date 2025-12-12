@@ -228,7 +228,7 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
                 "predicted_production_ton": float(predicted),
                 "gap_pct": float(gap_pct),
                 "efficiency_factor": float(g["efficiency_factor"].mean()),
-                "rain_mm": float(g["precipitation"].mean()),
+                "rain_mm": float(g["precipitation_mm"].mean()),
                 "wind_kmh": float(g["wind_speed_kmh"].max()),
                 "risk_level": g["risk_level"].mode()[0] if len(g["risk_level"].mode()) else "UNKNOWN"
             })
