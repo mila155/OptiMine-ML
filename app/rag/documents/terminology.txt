@@ -1,0 +1,30 @@
+Terminologi yang digunakan sesuai model optimasi:
+
+Production Success Probability
+- Diambil dari avg_efficiency.
+
+Risk Score
+- Angka 0 - 1 yang menunjukkan risiko operasional gabungan.
+
+Baseline Total Cost
+- Biaya operasi default berdasarkan model.
+
+Optimized Total Cost
+- Biaya setelah algoritma optimasi menghitung penghematan.
+
+Cost Savings
+- baseline_total_cost_usd - optimized_total_cost_usd
+
+Weather Impact
+- Diambil dari gabungan variabel cuaca: precipitation_mm, wind_speed_kmh, cloud_cover_pct.
+
+Cycle Delay
+- Prediksi keterlambatan siklus berdasarkan model produksi.
+
+Plan Types
+- Conservative: aman, stabil, risiko rendah, savings moderat.
+- Balanced: stabil, operasi optimal, savings baik.
+- Aggressive: savings besar, risiko meningkat.
+
+Confidence Score
+- Kepercayaan model terhadap prediksi akhir.
