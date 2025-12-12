@@ -1,0 +1,26 @@
+WEATHER PATTERNS AND OPERATIONAL IMPACT — DUMMY GUIDELINES
+
+PRECIPITATION:
+- 0–5 mm: Light rain. Minimal operational impact. Suitable for aggressive plans.
+- 5–20 mm: Moderate rain. Moderate operational constraints. Balanced plan recommended.
+- >20 mm: Heavy rain. High operational constraints. Avoid aggressive plans.
+
+WIND SPEED:
+- 0–15 km/h: Safe. Normal operational window.
+- 15–30 km/h: Potential slowdown in loading & hauling. Avoid high-risk scheduling.
+- >30 km/h: High wind risk. Shipping may be delayed. Mining excavation slowdown.
+
+TEMPERATURE:
+- 24–32°C optimal for equipment efficiency.
+- >35°C may cause overheating and reduce efficiency_factor.
+- <18°C may reduce cycle stability.
+
+CLOUD COVER:
+- <40%: Normal visibility, stable operations.
+- 40–70%: Minor impact, no major risk.
+- >70%: Potentially reduced light. Small reduction in production efficiency.
+
+KEY RULES:
+- Aggressive plans require: precipitation <10, wind_speed <20, visibility normal.
+- Balanced plans require: precipitation <20, wind_speed <30.
+- Conservative plans recommended if precipitation >20 or wind_speed >30.

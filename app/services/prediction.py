@@ -76,7 +76,8 @@ class PredictionService:
                 target_date=row["plan_date"]
             )
             weather_rows.append(weather)
-        
+
+        df['original_priority_flag'] = df['priority_flag']
         weather_df = pd.DataFrame(weather_rows)
         df = pd.concat([df, weather_df], axis=1)
 

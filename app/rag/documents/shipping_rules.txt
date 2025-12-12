@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Shipping controls vessel loading at each jetty.
 
 Factors:
@@ -22,3 +23,13 @@ Shipping Planner cares about:
 - Queueing risks
 - Weather risks impacting loading
 - Minimizing demurrage
+=======
+Prinsip dasar optimasi rencana pengapalan:
+- Loading efficiency menurun saat cloud_cover_pct > 60% atau precipitation_mm > 5 mm.
+- Wind speed di atas 30 km/h memiliki dampak signifikan pada risiko operasi jetty.
+- Demurrage cost meningkat tajam ketika predicted_loading_hours melebihi 24 jam.
+- Strategi Aggressive cocok ketika vessel memiliki loading rate tinggi dan cuaca stabil.
+- Strategi Balanced cocok ketika cuaca campuran dan ETA tidak terlalu ketat.
+- Strategi Conservative dipakai ketika risiko tinggi atau volume rencana melebihi kapasitas jetty.
+- Jetty tidak boleh dipaksa melebihi utilisasi 90%.
+>>>>>>> main

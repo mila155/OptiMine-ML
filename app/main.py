@@ -1,36 +1,59 @@
-import pandas as pd
 import io
+import os
+import pandas as pd
+from datetime import datetime
+from typing import List
+
 from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from datetime import datetime
-from typing import List, Optional, Dict, Any
+from typing import List
+from app.services import llm
 from app.services.prediction import PredictionService
 import os
-from pydantic import BaseModel
-from app.services.llm import call_groq
 from app.services.llm_service import LLMService
 llm_service = LLMService()
-from app.rag.vectorstore import VectorStore
 from app.rag.retriever import RAGRetriever
-from app.services.weather import WeatherService
-weather_service = WeatherService()
-from app.services.route_service import RouteService
-route_service = RouteService()
-
-vs = VectorStore("app/rag/documents")
-try:
-    vs.build()
-except Exception as e:
-    print("Warning: RAG build failed:", e)
-    
-rag = RAGRetriever(vector_store=vs)
+rag = RAGRetriever()
 
 from app.schemas import (
+    PredictionRequest, RAGQuery,
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
     ShippingPlanInput, ShippingPlanBatchInput, ShippingPredictionOutput, ShippingSummaryOutput,
-    HealthCheck, ErrorResponse
+    HealthCheck
 )
+
+from app.services.optimization import (
+    generate_top3_mining_plans,
+    generate_top3_shipping_plans
+)
+
+from app.rag.rag_engine import RAGEngineSafe
+
+# ==================== SAFE RAG ENGINE ====================
+
+class SafeRAGEngine:
+    def __init__(self, docs_path="app/rag/documents"):
+        try:
+            self.engine = RAGEngineSafe(docs_path)
+            self.ready = True
+            print("✅ RAG Engine initialized successfully.")
+        except Exception as e:
+            print("⚠️ Failed to initialize RAG Engine:", e)
+            self.engine = None
+            self.ready = False
+
+    def get_context(self, query: str, k: int = 5):
+        if self.engine and self.ready:
+            return self.engine.get_context(query, k=k)
+        else:
+            return "No document context available."
+
+DOCS_PATH = "app/rag/documents"
+rag_engine = SafeRAGEngine(DOCS_PATH)
+
+# ==================== FASTAPI SETUP ====================
 
 app = FastAPI(
     title="OptiMine API",
@@ -42,7 +65,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -51,55 +74,61 @@ app.add_middleware(
 models_dir = os.getenv("MODELS_DIR", "models")
 prediction_service = PredictionService(models_dir=models_dir)
 
-# ==================== HEALTH CHECK ====================
+# ==================== ROUTES ==========================
 
-@app.get("/", tags=["Health"])
-async def root():
-    return {
-        "message": "Welcome to OptiMine API",
-        "version": "1.0.0",
-        "docs": "/docs"
-    }
+@app.get("/")
+async def home():
+    return {"message": "API is running successfully!"}
 
 @app.get("/health", response_model=HealthCheck, tags=["Health"])
 async def health_check():
     models_status = prediction_service.is_healthy()
-    
     return HealthCheck(
-        status="healthy" if all(models_status.values()) else "degraded",
+        status="healthy" if all(models_status.values()) and rag_engine.ready else "degraded",
         timestamp=datetime.now(),
         models_loaded=models_status,
+        rag_status="healthy" if rag_engine.ready else "degraded",
         api_version="1.0.0"
     )
 
 # ==================== CHATBOT ====================
-    
-class ChatRequest(BaseModel):
-    question: str
 
-@app.post("/chatbot/rag")
-async def chatbot_rag(req: ChatRequest):
-    context = rag.get_context(req.question, k=5)
+@app.post("/chat", tags=["Chatbot"])
+async def chat_with_rag(query: str):
+    """
+    Chatbot RAG untuk seluruh domain OptiMine:
+    - mining
+    - shipping
+    - hauling
+    - weather
+    - ML explanation
+    """
+    try:
+        context = rag.retrieve(query, top_k=5)
 
-    prompt = f"""
-You are an AI assistant for mining, hauling, and shipping operations.
-Use the context below to answer clearly and concisely.
+        prompt = f"""
+        Anda adalah AI assistant untuk sistem OptiMine.
+        Jawab pertanyaan user menggunakan konteks berikut:
 
-CONTEXT:
-{context}
+        ==== KNOWLEDGE BASE ====
+        {context}
 
-USER QUESTION:
-{req.question}
+        ==== USER QUESTION ====
+        {query}
 
-ANSWER:
-"""
+        Jawab dengan jelas, ringkas, dan berbasis data.
+        """
 
-    answer = call_groq(prompt, {"max_tokens": 500})
+        answer = llm.ask(prompt)
 
-    return {
-        "answer": answer,
-        "context_used": context
-    }
+        return {
+            "query": query,
+            "answer": answer,
+            "context_used": context,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
         
 # ==================== MINING ENDPOINTS ====================
 
@@ -107,108 +136,55 @@ ANSWER:
 async def predict_mining_single(plan: MiningPlanInput):
     try:
         data = [plan.model_dump()]
-        
         result_df = prediction_service.predict_mining(data)
-        
-        response = []
-        for _, row in result_df.iterrows():
-            response.append(MiningPredictionOutput(
-                plan_id=row['plan_id'],
-                plan_date=row['plan_date'],
-                pit_id=row['pit_id'],
-                planned_production_ton=float(row['planned_production_ton']),
-                predicted_production_ton=float(row['predicted_production_ton']),
-                production_gap_ton=float(row['production_gap_ton']),
-                production_gap_pct=float(row['production_gap_pct']),
-                efficiency_factor=float(row['efficiency_factor']),
-                cycle_delay_min=float(row['cycle_delay_min']),
-                ai_priority_flag=row['ai_priority_flag'],
-                ai_priority_score=int(row['ai_priority_score']),
-                original_priority_flag=row['priority_flag'],
-                confidence_score=float(row['confidence_score']),
-                risk_level=row['risk_level'],
-                weather_impact=row['weather_impact']
-            ))
-        
+        response = [
+            MiningPredictionOutput(**{
+                **row.to_dict(),
+                'planned_production_ton': float(row['planned_production_ton']),
+                'predicted_production_ton': float(row['predicted_production_ton']),
+                'production_gap_ton': float(row['production_gap_ton']),
+                'production_gap_pct': float(row['production_gap_pct']),
+                'efficiency_factor': float(row['efficiency_factor']),
+                'cycle_delay_min': float(row['cycle_delay_min']),
+                'ai_priority_score': int(row['ai_priority_score']),
+                'confidence_score': float(row['confidence_score'])
+            }) for _, row in result_df.iterrows()
+        ]
         return response
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 @app.post("/mining/predict/batch", response_model=List[MiningPredictionOutput], tags=["Mining"])
 async def predict_mining_batch(batch: MiningPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        
         result_df = prediction_service.predict_mining(data)
-        
-        response = []
-        for _, row in result_df.iterrows():
-            response.append(MiningPredictionOutput(
-                plan_id=row['plan_id'],
-                plan_date=row['plan_date'],
-                pit_id=row['pit_id'],
-                planned_production_ton=float(row['planned_production_ton']),
-                predicted_production_ton=float(row['predicted_production_ton']),
-                production_gap_ton=float(row['production_gap_ton']),
-                production_gap_pct=float(row['production_gap_pct']),
-                efficiency_factor=float(row['efficiency_factor']),
-                cycle_delay_min=float(row['cycle_delay_min']),
-                ai_priority_flag=row['ai_priority_flag'],
-                ai_priority_score=int(row['ai_priority_score']),
-                original_priority_flag=row['priority_flag'],
-                confidence_score=float(row['confidence_score']),
-                risk_level=row['risk_level'],
-                weather_impact=row['weather_impact']
-            ))
-        
+        response = [
+            MiningPredictionOutput(**{
+                **row.to_dict(),
+                'planned_production_ton': float(row['planned_production_ton']),
+                'predicted_production_ton': float(row['predicted_production_ton']),
+                'production_gap_ton': float(row['production_gap_ton']),
+                'production_gap_pct': float(row['production_gap_pct']),
+                'efficiency_factor': float(row['efficiency_factor']),
+                'cycle_delay_min': float(row['cycle_delay_min']),
+                'ai_priority_score': int(row['ai_priority_score']),
+                'confidence_score': float(row['confidence_score'])
+            }) for _, row in result_df.iterrows()
+        ]
         return response
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Batch prediction failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Batch prediction failed: {str(e)}")
 
 @app.post("/mining/summary", response_model=MiningSummaryOutput, tags=["Mining"])
 async def get_mining_summary(batch: MiningPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        
         result_df = prediction_service.predict_mining(data)
-        weather_data = []
-
-        for _, row in result_df.iterrows():
-            w = weather_service.fetch_weather(
-                lat=row["latitude"],
-                lon=row["longitude"],
-                target_date=row["plan_date"]
-            )
-            weather_data.append(w)
-            
-        weather_df = pd.DataFrame(weather_data)
-        for col in ["temp_day", "wind_speed_kmh", "precipitation_mm", "cloud_cover_pct"]:
-            weather_df[col] = weather_df[col].apply(
-                lambda x: x[0] if isinstance(x, list) else x
-            )
-            
-        weather_cols = ["temp_day", "wind_speed_kmh", "precipitation_mm", "cloud_cover_pct"]
-
-        for col in weather_cols:
-            if col in result_df.columns:
-                result_df = result_df.drop(columns=[col])
-                
-        result_df = pd.concat([result_df.reset_index(drop=True), weather_df], axis=1)
-
+        
         total_planned = result_df['planned_production_ton'].sum()
         total_predicted = result_df['predicted_production_ton'].sum()
-        production_gap_pct = (
-            (total_planned - total_predicted) / total_planned * 100
-            if total_planned > 0 else 0
-        )
+        production_gap_pct = ((total_predicted - total_planned) / total_planned * 100) if total_planned > 0 else 0
         
         summary = {
             "role": "Mining Planner",
@@ -219,238 +195,120 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
             "total_predicted_production_ton": float(total_predicted),
             "production_gap_pct": float(production_gap_pct),
             "avg_efficiency": float(result_df['efficiency_factor'].mean()),
-            "avg_hauling_distance": float(result_df["hauling_distance_km"].mean()),
-            "avg_rain": float(result_df["precipitation_mm"].mean()),
-            "max_wind": float(result_df["wind_speed_kmh"].max()),
-            "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),           
+            "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),
+            "daily_summary": result_df.groupby('plan_date').agg({
+                'planned_production_ton': 'sum',
+                'predicted_production_ton': 'sum',
+                'efficiency_factor': 'mean',
+                'risk_level': lambda x: x.mode()[0] if len(x.mode()) > 0 else 'UNKNOWN'
+            }).reset_index().to_dict('records')
         }
-
-        daily_rows = []
-        grouped = result_df.groupby("plan_date")
-
-        for i, (date, g) in enumerate(grouped, start=1):
-            planned = g['planned_production_ton'].sum()
-            predicted = g['predicted_production_ton'].sum()
-            gap_pct = (planned - predicted) / planned * 100 if planned > 0 else 0
-
-            daily_rows.append({
-                "day": i,
-                "date": date,
-                "active_pits": ", ".join(sorted(g["pit_id"].unique())),
-                "planned_production_ton": float(planned),
-                "predicted_production_ton": float(predicted),
-                "gap_pct": float(gap_pct),
-                "efficiency_factor": float(g["efficiency_factor"].mean()),
-                "rain_mm": float(g["precipitation_mm"].mean()),
-                "wind_kmh": float(g["wind_speed_kmh"].max()),
-                "risk_level": g["risk_level"].mode()[0] if len(g["risk_level"].mode()) else "UNKNOWN"
-            })
-
-        summary["daily_summary"] = daily_rows        
         summary["ai_summary"] = llm_service.summarize_mining(summary)
         
         return MiningSummaryOutput(**summary)
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Summary generation failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Summary generation failed: {str(e)}")
 
-# ==================== SHIPPING ENDPOINTS ====================
+# ==================== SHIPPING ENDPOINTS ===================
 
 @app.post("/shipping/predict", response_model=List[ShippingPredictionOutput], tags=["Shipping"])
 async def predict_shipping_single(plan: ShippingPlanInput):
     try:
         data = [plan.model_dump()]
-        
         result_df = prediction_service.predict_shipping(data)
-        
-        response = []
-        for _, row in result_df.iterrows():
-            response.append(ShippingPredictionOutput(
-                shipment_id=row['shipment_id'],
-                vessel_name=row['vessel_name'],
-                assigned_jetty=row['assigned_jetty'],
-                eta_date=row['eta_date'],
-                planned_volume_ton=float(row['planned_volume_ton']),
-                predicted_loading_hours=float(row['predicted_loading_hours']),
-                loading_efficiency=float(row['loading_efficiency']),
-                predicted_demurrage_cost=float(row['predicted_demurrage_cost']),
-                confidence_score=float(row['confidence_score']),
-                risk_level=row['risk_level'],
-                status=row['status'],
-                weather_impact=row['weather_impact'],
-                recommended_action=row['recommended_action']
-            ))
-        
+        response = [
+            ShippingPredictionOutput(**{
+                **row.to_dict(),
+                'planned_volume_ton': float(row['planned_volume_ton']),
+                'predicted_loading_hours': float(row['predicted_loading_hours']),
+                'loading_efficiency': float(row['loading_efficiency']),
+                'predicted_demurrage_cost': float(row['predicted_demurrage_cost']),
+                'confidence_score': float(row['confidence_score'])
+            }) for _, row in result_df.iterrows()
+        ]
         return response
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Prediction failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
 
 @app.post("/shipping/predict/batch", response_model=List[ShippingPredictionOutput], tags=["Shipping"])
 async def predict_shipping_batch(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        
         result_df = prediction_service.predict_shipping(data)
-        
-        response = []
-        for _, row in result_df.iterrows():
-            response.append(ShippingPredictionOutput(
-                shipment_id=row['shipment_id'],
-                vessel_name=row['vessel_name'],
-                assigned_jetty=row['assigned_jetty'],
-                eta_date=row['eta_date'],
-                planned_volume_ton=float(row['planned_volume_ton']),
-                predicted_loading_hours=float(row['predicted_loading_hours']),
-                loading_efficiency=float(row['loading_efficiency']),
-                predicted_demurrage_cost=float(row['predicted_demurrage_cost']),
-                confidence_score=float(row['confidence_score']),
-                risk_level=row['risk_level'],
-                status=row['status'],
-                weather_impact=row['weather_impact'],
-                recommended_action=row['recommended_action']
-            ))
-        
+        response = [
+            ShippingPredictionOutput(**{
+                **row.to_dict(),
+                'planned_volume_ton': float(row['planned_volume_ton']),
+                'predicted_loading_hours': float(row['predicted_loading_hours']),
+                'loading_efficiency': float(row['loading_efficiency']),
+                'predicted_demurrage_cost': float(row['predicted_demurrage_cost']),
+                'confidence_score': float(row['confidence_score'])
+            }) for _, row in result_df.iterrows()
+        ]
         return response
-        
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Batch prediction failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Batch prediction failed: {str(e)}")
 
 @app.post("/shipping/summary", response_model=ShippingSummaryOutput, tags=["Shipping"])
 async def get_shipping_summary(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-
         result_df = prediction_service.predict_shipping(data)
-
-        required_cols = ["rom_lat", "rom_lon", "jetty_lat", "jetty_lon"]
-        for col in required_cols:
-            if col not in result_df.columns:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Column '{col}' is missing in JSON input. "
-                           f"Backend web must send lat/lon for ROM and Jetty."
-                )
-            result_df[col] = pd.to_numeric(result_df[col], errors="coerce")
-
-        route_recommendations = {}
-
-        for _, row in result_df.iterrows():
-            r = route_service.compute_route(
-                row["rom_lat"], row["rom_lon"],
-                row["jetty_lat"], row["jetty_lon"]
-            )
-
-            route_recommendations[row["shipment_id"]] = {
-                "rom_id": row["rom_id"],
-                "jetty_id": row["jetty_id"],
-                "rom_coordinates": {
-                    "lat": row["rom_lat"],
-                    "lon": row["rom_lon"]
-                },
-                "jetty_coordinates": {
-                    "lat": row["jetty_lat"],
-                    "lon": row["jetty_lon"]
-                },
-                "distance_km": r["distance_km"],
-                "duration_min": r["duration_min"]
-            }
 
         summary = {
             "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
             "total_days": len(result_df["eta_date"].unique()),
             "total_volume_ton": float(result_df["planned_volume_ton"].sum()),
             "total_vessels": len(result_df),
-            "total_demurrage_cost": float(result_df["predicted_demurrage_cost"].sum()),
-            "avg_loading_efficiency": float(result_df["loading_efficiency"].mean()),
-            "high_risk_days": int((result_df["risk_level"] == "HIGH").sum()),
+            "total_demurrage_cost": float(result_df['predicted_demurrage_cost'].sum()),
+            "avg_loading_efficiency": float(result_df['loading_efficiency'].mean()),
+            "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),
+            "daily_summary": result_df.groupby('eta_date').agg({
+                'planned_volume_ton': 'sum',
+                'predicted_loading_hours': 'mean',
+                'loading_efficiency': 'mean',
+                'risk_level': lambda x: x.mode()[0] if len(x.mode()) > 0 else "UNKNOWN"
+            }).reset_index().to_dict('records'),
+            "route_recommendations": {},
+            "ai_summary": None
         }
-
-        daily_summary = (
-            result_df.groupby("eta_date")
-            .agg({
-                "planned_volume_ton": "sum",
-                "predicted_loading_hours": "mean",
-                "loading_efficiency": "mean",
-                "risk_level": lambda x: x.mode()[0] if len(x.mode()) else "UNKNOWN"
-            })
-            .reset_index()
-        ).to_dict("records")
-
-        summary["daily_summary"] = daily_summary
         summary["ai_summary"] = llm_service.summarize_shipping(summary)
-        summary["route_recommendations"] = route_recommendations
 
         return ShippingSummaryOutput(**summary)
-
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Shipping summary generation failed: {str(e)}"
-        )
-    
-# ==================== OPTIMIZATION ENDPOINTS ====================
+        raise HTTPException(status_code=500, detail=f"Shipping summary generation failed: {str(e)}")
 
-from app.services.optimization import (
-    generate_top3_mining_plans,
-    generate_top3_shipping_plans
-)
+# ==================== OPTIMIZATION ======================
 
 @app.post("/mining/optimize", tags=["Optimization"])
 async def optimize_mining(batch: MiningPlanBatchInput):
-    """
-    Optimize mining schedule and return Top 3 plans (with RAG + LLM justification)
-    """
     try:
         data = [p.model_dump() for p in batch.plans]
         pred_df = prediction_service.predict_mining(data)
-
         result = generate_top3_mining_plans(pred_df, config={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
-            "max_tokens": 1024
+            "max_tokens": 1024,
+            "rag_engine": rag_engine
         })
-
         return result
-
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Mining optimization failed: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Mining optimization failed: {str(e)}")
 
 @app.post("/shipping/optimize", tags=["Optimization"])
 async def optimize_shipping(batch: ShippingPlanBatchInput):
-    """
-    Optimize shipping schedule and return Top 3 plans (with RAG + LLM justification)
-    """
     try:
         data = [p.model_dump() for p in batch.plans]
         pred_df = prediction_service.predict_shipping(data)
-
         result = generate_top3_shipping_plans(pred_df, config={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
-            "max_tokens": 1024
+            "max_tokens": 1024,
+            "rag_engine": rag_engine
         })
-
         return result
-
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Shipping optimization failed: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Shipping optimization failed: {str(e)}")
 
 # ==================== ERROR HANDLERS ====================
 
@@ -475,7 +333,7 @@ async def general_exception_handler(request, exc):
         }
     )
 
-# ==================== RUN SERVER ====================
+# ==================== RUN SERVER ======================
 
 if __name__ == "__main__":
     import uvicorn

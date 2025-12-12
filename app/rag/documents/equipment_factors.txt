@@ -1,0 +1,25 @@
+EQUIPMENT FACTORS FOR MINING OPERATIONS — DUMMY GUIDELINES
+
+EXCAVATOR PERFORMANCE:
+- Standard cycle time: 25–32 seconds.
+- Wet conditions increase cycle delay by 5–15%.
+- Efficiency degradation under moderate rain: -0.05 to -0.10.
+
+HAUL TRUCK PERFORMANCE:
+- Optimal hauling distance: <10 km.
+- For distances 10–20 km: fuel cost and cycle delay increase significantly.
+- Hauling_distance_km directly increases cycle_delay_min.
+
+EQUIPMENT FAILURE PROBABILITY (DUMMY):
+- High rainfall: +10% risk.
+- Wind_speed >30 km/h: +5% operational disruption.
+
+EFFICIENCY FACTOR GUIDELINE:
+- Efficiency >0.85: suitable for aggressive or balanced.
+- 0.70–0.85: balanced recommended.
+- <0.70: conservative required.
+
+KEY RULES:
+- Aggressive plans require low hauling distance and high observed efficiency.
+- Balanced plans tolerate mid hauling distance and moderate cycle delays.
+- Conservative plans required when weather + equipment risk both elevated.

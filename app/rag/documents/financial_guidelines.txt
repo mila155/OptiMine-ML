@@ -1,0 +1,24 @@
+FINANCIAL IMPACT RULES — DUMMY GUIDELINES
+
+COST STRUCTURE:
+- Total cost driven by hauling_distance_km, cycle_delay_min, and weather delays.
+- Every +1 km of hauling distance adds incremental operational cost.
+- Rain >20 mm increases cost by introducing delay and idle-time cost.
+
+FINANCIAL IMPACT CLASSIFICATION:
+- High savings: >15% reduction from baseline_total_cost_usd.
+- Moderate savings: 8–15% reduction.
+- Low savings: <8% reduction.
+
+RISK VS COST TRADEOFF RULES:
+- Aggressive strategy permitted only if risk_level = LOW or MEDIUM AND savings >10%.
+- Balanced strategy is default unless weather_impact severe.
+- Conservative strategy preferred when predicted_demurrage_cost or operational delay risk exceeds thresholds.
+
+OPTIMIZATION CONSTRAINTS:
+- Conservative plans minimize risk, acceptable if savings small.
+- Balanced plans provide stable compromise between risk + savings.
+- Aggressive plans aim to maximize cost_savings_usd while accepting higher cycle_delay_min variability.
+
+KEY RULE:
+“Choose the plan with the highest savings that stays within acceptable risk for weather_impact and equipment efficiency.”

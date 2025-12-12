@@ -1,0 +1,8 @@
+Pelajaran umum dari hasil model optimasi:
+- Strategi konservatif memberikan reliabilitas terbaik saat kondisi cuaca tidak stabil.
+- Strategi balanced memberikan performa paling stabil pada mayoritas kasus real-world.
+- Strategi aggressive memberikan cost savings tertinggi tetapi hanya aman saat risiko rendah.
+- Rencana dengan cost savings negatif tidak direkomendasikan meskipun produksinya tinggi.
+- Menurunkan volume atau target harian pada cuaca buruk sering kali mengurangi total delay.
+- Rencana yang memiliki risk score tinggi cenderung menghasilkan deviasi besar pada outcome.
+- Penghematan terbesar biasanya berasal dari pengurangan waktu tunggu atau cycle delay.

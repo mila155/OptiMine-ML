@@ -1,0 +1,9 @@
+Template struktur keluaran optimasi Pertambangan yang baik:
+- Deskripsi singkat mengenai tujuan rencana.
+- Penjelasan efek operasional harian.
+- Dampak kecepatan produksi atau durasi loading.
+- Analisis dampak finansial, termasuk cost savings.
+- Penjelasan risk score yang diambil dari prediksi model.
+- Langkah implementasi yang dapat dilakukan tim lapangan.
+- Rekomendasi kapan rencana ini lebih unggul dibanding dua alternatif lainnya.
+- Penutup singkat yang menjelaskan kestabilan rencana berdasarkan kondisi cuaca dan risiko.

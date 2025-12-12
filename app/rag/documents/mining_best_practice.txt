@@ -1,0 +1,9 @@
+Rekomendasi umum untuk optimasi rencana pertambangan:
+- Gunakan strategi konservatif saat efisiensi rata-rata di bawah 0.70 atau ketika risiko cuaca tinggi.
+- Strategi Balanced efektif ketika prediksi produksi stabil dan cuaca moderat.
+- Strategi Aggressive hanya direkomendasikan ketika prediksi produksi jauh di atas rencana dan efisiensi > 0.85.
+- Hauling distance yang lebih pendek umumnya menghasilkan pengurangan cycle delay.
+- Produksi biasanya turun ketika precipitation_mm > 10. Penurunan makin besar ketika mencapai > 20 mm.
+- Cycle delay di lapangan cenderung meningkat ketika angin > 20 km/h atau cloud cover > 70%.
+- Pit dengan riwayat produksi stabil lebih cocok untuk scaling up pada strategi aggressive.
+- Hindari scaling up ketika gap produksi negatif > 1000 ton.
