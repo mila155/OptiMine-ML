@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from groq import Groq
 
 class VectorStore:
     def __init__(self, docs_path: str):
