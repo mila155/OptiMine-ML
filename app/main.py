@@ -13,6 +13,8 @@ from app.services.llm_service import LLMService
 llm_service = LLMService()
 from app.rag.vectorstore import VectorStore
 from app.rag.retriever import RAGRetriever
+from app.services.weather import WeatherService
+weather_service = WeatherService()
 
 vs = VectorStore("app/rag/documents")
 try:
@@ -175,6 +177,18 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
         data = [plan.model_dump() for plan in batch.plans]
         
         result_df = prediction_service.predict_mining(data)
+        weather_data = []
+
+        for _, row in result_df.iterrows():
+            w = weather_service.fetch_weather(
+                lat=row["latitude"],
+                lon=row["longitude"],
+                target_date=row["plan_date"]
+            )
+            weather_data.append(w)
+
+        weather_df = pd.DataFrame(weather_data)
+        result_df = pd.concat([result_df.reset_index(drop=True), weather_df], axis=1)
 
         total_planned = result_df['planned_production_ton'].sum()
         total_predicted = result_df['predicted_production_ton'].sum()
@@ -193,7 +207,7 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
             "production_gap_pct": float(production_gap_pct),
             "avg_efficiency": float(result_df['efficiency_factor'].mean()),
             "avg_hauling_distance": float(result_df["hauling_distance_km"].mean()),
-            "avg_rain": float(result_df["precipitation"].mean()),
+            "avg_rain": float(result_df["precipitation_mm"].mean()),
             "max_wind": float(result_df["wind_speed_kmh"].max()),
             "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),           
         }
