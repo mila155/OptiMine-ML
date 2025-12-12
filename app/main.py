@@ -21,14 +21,14 @@ from app.services.optimization import (
     generate_top3_shipping_plans
 )
 
-from app.rag.rag_engine import RAGEngine
+from app.rag.rag_engine import RAGEngineSafe
 
 # ==================== SAFE RAG ENGINE ====================
 
 class SafeRAGEngine:
     def __init__(self, docs_path="app/rag/documents"):
         try:
-            self.engine = RAGEngine(docs_path)
+            self.engine = RAGEngineSafe(docs_path)
             self.ready = True
             print("✅ RAG Engine initialized successfully.")
         except Exception as e:

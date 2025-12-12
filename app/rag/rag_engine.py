@@ -1,7 +1,8 @@
 # -------------------------------
-# RAG Engine Safe
+# rag_engine.py
 # -------------------------------
 from app.rag.vectorstore import VectorStore
+from app.rag.retriever import RAGRetriever
 
 
 class RAGEngineSafe:
@@ -24,28 +25,13 @@ class RAGEngineSafe:
         except Exception:
             self.vs = None
             self.retriever = None
-
-    def get_context(self, query: str, k: int = 5) -> str:
-        if not query:
-            return ""
-        try:
-            if self.retriever:
-                ctx = self.retriever.get_context(query, top_k=k)
-                return ctx or ""
-        except Exception:
-            pass
-        return ""  # fallback aman
-
-# -------------------------------
-# RAG Retriever
-# -------------------------------
-class RAGRetriever:
-    def __init__(self, vectorstore):
-        self.store = vectorstore
-
-    def get_context(self, query: str, top_k: int = 5):
-        try:
-            results = self.store.search(query, top_k)
-            return "\n".join([r["text"] for r in results])
-        except Exception:
-            return "Tidak ada konteks tersedia"
+def get_context(self, query: str, k: int = 5) -> str:
+    if not query:
+        return "Tidak ada konteks tersedia"
+    try:
+        if self.retriever:
+            ctx = self.retriever.get_context(query, top_k=k)
+            return ctx or "Tidak ada konteks tersedia"
+    except Exception:
+        pass
+    return "Tidak ada konteks tersedia"  # fallback aman
