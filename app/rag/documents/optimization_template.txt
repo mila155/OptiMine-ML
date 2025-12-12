@@ -1,4 +1,4 @@
-Template struktur keluaran optimasi yang baik:
+Template struktur keluaran optimasi Pertambangan yang baik:
 - Deskripsi singkat mengenai tujuan rencana.
 - Penjelasan efek operasional harian.
 - Dampak kecepatan produksi atau durasi loading.
