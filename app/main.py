@@ -175,21 +175,51 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
         data = [plan.model_dump() for plan in batch.plans]
         
         result_df = prediction_service.predict_mining(data)
+
+        total_planned = result_df['planned_production_ton'].sum()
+        total_predicted = result_df['predicted_production_ton'].sum()
+        production_gap_pct = (
+            (total_planned - total_predicted) / total_planned * 100
+            if total_planned > 0 else 0
+        )
         
         summary = {
+            "role": "Mining Planner",
+            "focus": "Pit-to-ROM Operations & Production Optimization",
             "period": f"{result_df['plan_date'].min()} to {result_df['plan_date'].max()}",
             "total_days": len(result_df['plan_date'].unique()),
-            "total_planned_production_ton": float(result_df['planned_production_ton'].sum()),
-            "total_predicted_production_ton": float(result_df['predicted_production_ton'].sum()),
+            "total_planned_production_ton":  float(total_planned),
+            "total_predicted_production_ton": float(total_predicted),
+            "production_gap_pct": float(production_gap_pct),
             "avg_efficiency": float(result_df['efficiency_factor'].mean()),
-            "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),
-            "daily_summary": result_df.groupby('plan_date').agg({
-                'planned_production_ton': 'sum',
-                'predicted_production_ton': 'sum',
-                'efficiency_factor': 'mean',
-                'risk_level': lambda x: x.mode()[0] if len(x.mode()) > 0 else 'UNKNOWN'
-            }).reset_index().to_dict('records')
+            "avg_hauling_distance": float(result_df["hauling_distance_km"].mean()),
+            "avg_rain": float(result_df["precipitation"].mean()),
+            "max_wind": float(result_df["wind_speed_kmh"].max()),
+            "high_risk_days": int((result_df['risk_level'] == 'HIGH').sum()),           
         }
+
+        daily_rows = []
+        grouped = result_df.groupby("plan_date")
+
+        for i, (date, g) in enumerate(grouped, start=1):
+            planned = g['planned_production_ton'].sum()
+            predicted = g['predicted_production_ton'].sum()
+            gap_pct = (planned - predicted) / planned * 100 if planned > 0 else 0
+
+            daily_rows.append({
+                "day": i,
+                "date": date,
+                "active_pits": ", ".join(sorted(g["pit_id"].unique())),
+                "planned_production_ton": float(planned),
+                "predicted_production_ton": float(predicted),
+                "gap_pct": float(gap_pct),
+                "efficiency_factor": float(g["efficiency_factor"].mean()),
+                "rain_mm": float(g["precipitation"].mean()),
+                "wind_kmh": float(g["wind_speed_kmh"].max()),
+                "risk_level": g["risk_level"].mode()[0] if len(g["risk_level"].mode()) else "UNKNOWN"
+            })
+
+        summary["daily_summary"] = daily_rows        
         summary["ai_summary"] = llm_service.summarize_mining(summary)
         
         return MiningSummaryOutput(**summary)
