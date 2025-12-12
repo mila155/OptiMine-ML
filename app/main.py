@@ -8,13 +8,14 @@ from typing import List, Optional, Dict, Any
 from app.services.prediction import PredictionService
 import os
 from pydantic import BaseModel
+from app.services.llm import call_groq
 from app.services.llm_service import LLMService
 llm_service = LLMService()
 from app.rag.vectorstore import VectorStore
 from app.rag.retriever import RAGRetriever
 vs = VectorStore("app/rag/documents")
 vs.build()
-rag = RAGRetriever(vs)
+rag = RAGRetriever(vector_store=vs)
 
 from app.schemas import (
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
@@ -65,53 +66,31 @@ async def health_check():
 # ==================== CHATBOT ====================
     
 class ChatRequest(BaseModel):
-    message: str
-    top_k: Optional[int] = 4
-    history: Optional[List[Dict[str, str]]] = None
-    include_sources: Optional[bool] = True
+    question: str
 
-class ChatResponse(BaseModel):
-    answer: str
-    sources: List[Dict[str, Any]]
-    used_count: int
+@app.post("/chatbot/rag")
+async def chatbot_rag(req: ChatRequest):
+    context = rag.get_context(req.question, k=5)
 
-@app.post("/chat", response_model=ChatResponse, tags=["Chatbot"])
-async def chat_rag_endpoint(req: ChatRequest):
-    """
-    Chat endpoint that uses RAG retriever + LLM (Groq).
-    Request JSON:
-    {
-      "message": "Apa penyebab produksi turun?",
-      "top_k": 4,
-      "history": [{"role":"user","message":"..."}],
-      "include_sources": true
+    prompt = f"""
+You are an AI assistant for mining, hauling, and shipping operations.
+Use the context below to answer clearly and concisely.
+
+CONTEXT:
+{context}
+
+USER QUESTION:
+{req.question}
+
+ANSWER:
+"""
+
+    answer = call_groq(prompt, {"max_tokens": 500})
+
+    return {
+        "answer": answer,
+        "context_used": context
     }
-    """
-    try:
-        docs = rag_service.retrieve_context(req.message, top_k=req.top_k)
-
-        prompt = rag_service.build_prompt(req.message, docs, history=req.history)
-
-        answer = llm_service.ask(prompt)
-
-        sources = []
-        for i, d in enumerate(docs):
-            sources.append({
-                "source_index": i+1,
-                "id": d.get("id"),
-                "score": d.get("score"),
-                "metadata": d.get("metadata"),
-                "snippet": (d.get("text")[:500] + "...") if len(d.get("text",""))>500 else d.get("text")
-            })
-
-        return ChatResponse(
-            answer=answer,
-            sources=sources if req.include_sources else [],
-            used_count=len(docs)
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"RAG chat failed: {e}")
         
 # ==================== MINING ENDPOINTS ====================
 
