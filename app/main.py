@@ -10,7 +10,7 @@ import os
 from pydantic import BaseModel
 from app.rag.retriever import RAGRetriever
 from app.rag.vectorstore import VectorStore
-from .schemas import PredictionRequest, RAGQuery
+from app.schemas import PredictionRequest, RAGQuery
 
 
 from app.schemas import (
@@ -40,7 +40,7 @@ prediction_service = PredictionService(models_dir=models_dir)
 
 # ==================== RAG INITIALIZATION ====================
 
-DOCS_PATH = "app/rag/docs"    # Pastikan folder ini ADA
+DOCS_PATH = "app/rag/documents"    # Pastikan folder ini ADA
 
 try:
     vector_store = VectorStore(DOCS_PATH)

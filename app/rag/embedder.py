@@ -1,19 +1,11 @@
-from transformers import AutoTokenizer, AutoModel
-import torch
-import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-class Embedder:
-    def __init__(self, model_name="intfloat/e5-small"):
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModel.from_pretrained(model_name)
+class SimpleEmbedder:
+    def __init__(self):
+        self.vectorizer = TfidfVectorizer()
+
+    def fit(self, texts):
+        self.vectorizer.fit(texts)
 
     def encode(self, texts):
-        if isinstance(texts, str):
-            texts = [texts]
-
-        inputs = self.tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
-        with torch.no_grad():
-            outputs = self.model(**inputs)
-
-        embeddings = outputs.last_hidden_state.mean(dim=1)
-        return embeddings.cpu().numpy()
+        return self.vectorizer.transform(texts).toarray()
