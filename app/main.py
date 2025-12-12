@@ -11,7 +11,9 @@ from pydantic import BaseModel
 from app.services.llm_service import LLMService
 llm_service = LLMService()
 from app.rag.retriever import RAGRetriever
-rag = RAGRetriever()
+vs = VectorStore("app/rag/documents")
+vs.build()
+rag = RAGRetriever(vs)
 
 from app.schemas import (
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
