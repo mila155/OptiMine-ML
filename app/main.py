@@ -194,6 +194,7 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
             )
         result_df = pd.concat([result_df.reset_index(drop=True), weather_df], axis=1)
         print("DEBUG COLUMNS:", result_df.columns.tolist())
+        return {"columns": result_df.columns.tolist()}
 
         total_planned = result_df['planned_production_ton'].sum()
         total_predicted = result_df['predicted_production_ton'].sum()
