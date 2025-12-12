@@ -747,8 +747,114 @@ Direkomendasikan untuk operasi harian dengan fluktuasi kondisi yang dapat dipred
 # -------------------------
 # Top3 Mining generator - PATCHED
 # -------------------------
-def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
-    print(f"🚀 START generate_top3_mining_plans with {len(predictions)} rows")
+def generate_top3_mining_plans_fixed(predictions: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Fixed version with proper calculations"""
+    df = predictions.copy()
+    df['plan_date'] = pd.to_datetime(df['plan_date']) if 'plan_date' in df.columns else pd.date_range(start=datetime.now().date(), periods=len(df))
+    
+    executive_summary = _make_executive_summary_mining(df)
+
+    strategies = [
+        {"id": 1, "name": "Conservative Plan", "prod_multiplier": 0.90, "risk_threshold": 0.7, "description": "Meminimalkan risiko operasional akibat cuaca dan keterlambatan"},
+        {"id": 2, "name": "Balanced Plan", "prod_multiplier": 1.00, "risk_threshold": 0.6, "description": "Menyeimbangkan target produksi dengan pengelolaan risiko yang efektif"},
+        {"id": 3, "name": "Aggressive Plan", "prod_multiplier": 1.10, "risk_threshold": 0.5, "description": "Memaksimalkan volume produksi untuk memenuhi permintaan tinggi"}
+    ]
+
+    recommendations = []
+
+    for s in strategies:
+        optimized_schedule = []
+        total_baseline_cost = 0.0
+        total_optimized_cost = 0.0
+        total_risk_score = 0.0
+
+        for idx, row in df.iterrows():
+            # FIXED: Hitung confidence yang benar (hanya 0-1)
+            conf_items = []
+            
+            # Priority: confidence_score > efficiency_factor
+            if 'confidence_score' in row and not pd.isna(row['confidence_score']):
+                conf_items.append(float(row['confidence_score']))
+            if 'efficiency_factor' in row and not pd.isna(row['efficiency_factor']):
+                conf_items.append(float(row['efficiency_factor']))
+            
+            # Jika tidak ada, gunakan default
+            if not conf_items:
+                overall_conf = 0.6
+            else:
+                overall_conf = float(np.mean(conf_items))
+                # Pastikan antara 0-1
+                overall_conf = max(0.1, min(1.0, overall_conf))
+            
+            # Apply strategy multiplier
+            adj_multiplier = s['prod_multiplier']
+            if overall_conf < s['risk_threshold']:
+                adj_multiplier *= 0.8  # Kurangi lebih banyak jika risk tinggi
+            
+            rationale = f"{s['name']}: {'Dikurangi karena risiko tinggi' if overall_conf < s['risk_threshold'] else 'Beroperasi normal'}"
+            
+            original_prod = float(row.get('planned_production_ton', 0.0))
+            adjusted_prod = round(original_prod * adj_multiplier, 0)
+            
+            # Cost calculation ($30 per ton)
+            baseline_cost = original_prod * 30.0
+            optimized_cost = adjusted_prod * 30.0
+            total_baseline_cost += baseline_cost
+            total_optimized_cost += optimized_cost
+            total_risk_score += (1.0 - overall_conf)  # Risk = 1 - confidence
+            
+            # FIXED: Weather condition yang lebih baik
+            weather_info = []
+            if 'precipitation_mm' in row and not pd.isna(row['precipitation_mm']):
+                weather_info.append(f"Hujan: {row['precipitation_mm']}mm")
+            if 'wind_speed_kmh' in row and not pd.isna(row['wind_speed_kmh']):
+                weather_info.append(f"Angin: {row['wind_speed_kmh']}km/j")
+            if 'weather_impact' in row and not pd.isna(row['weather_impact']):
+                weather_info.append(f"Dampak: {row['weather_impact']}")
+            
+            weather_condition = " | ".join(weather_info) if weather_info else "Kondisi normal"
+            
+            optimized_schedule.append({
+                "date": str(row['plan_date'].date()),
+                "plan_id": row.get('plan_id', f"MP{idx+1:03d}"),
+                "original_production_ton": int(original_prod),
+                "optimized_production_ton": int(adjusted_prod),
+                "adjustment_pct": round(((adjusted_prod - original_prod) / original_prod * 100) if original_prod > 0 else 0, 2),
+                "baseline_cost_usd": round(float(baseline_cost), 2),
+                "optimized_cost_usd": round(float(optimized_cost), 2),
+                "confidence_score": round(overall_conf, 2),  # Sekarang 0-1
+                "weather_condition": weather_condition,
+                "rationale": rationale
+            })
+
+        financial_impact = {
+            "baseline_total_cost_usd": round(total_baseline_cost, 2),
+            "optimized_total_cost_usd": round(total_optimized_cost, 2),
+            "cost_savings_usd": round(total_baseline_cost - total_optimized_cost, 2),
+            "avg_risk_score": round(total_risk_score / len(df), 2) if len(df) > 0 else 0.0
+        }
+
+        plan_obj = {
+            "plan_id": s['id'],
+            "plan_name": s['name'],
+            "strategy_description": s['description'],
+            "optimized_schedule": optimized_schedule,
+            "financial_impact": financial_impact,
+            "implementation_steps": _get_implementation_steps(s['name']),
+            "strengths": _get_strengths(s['name'], financial_impact, optimized_schedule),
+            "limitations": _get_limitations(s['name'], financial_impact, len(df)),
+            "justification": _generate_detailed_justification(s['name'], financial_impact, optimized_schedule)
+        }
+
+        recommendations.append(plan_obj)
+
+    return {
+        "plan_type": "RENCANA OPTIMASI PERTAMBANGAN",
+        "generated_at": datetime.now().isoformat(),
+        "executive_summary": executive_summary,
+        "recommendations": recommendations
+    }
+    print(f"🚀 START generate_top3_mining_plans with {len(predictions)} rows")  
     
     try:
         df = predictions.copy()
@@ -1210,3 +1316,139 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
         "executive_summary": executive_summary,
         "recommendations": recommendations
     }
+def _get_implementation_steps(plan_name: str) -> List[str]:
+    if "Conservative" in plan_name:
+        return [
+            "Tinjau ulang target produksi harian dengan tim operasional",
+            "Prioritaskan maintenance preventif untuk equipment utama",
+            "Implementasikan daily safety briefing dengan fokus pada kondisi cuaca",
+            "Siapkan contingency plan untuk equipment breakdown",
+            "Monitor real-time production vs target setiap 4 jam"
+        ]
+    elif "Aggressive" in plan_name:
+        return [
+            "Optimalkan shift pattern menjadi 3 shift operasional",
+            "Implementasikan predictive maintenance untuk minimalkan downtime",
+            "Tingkatkan fuel dan spare parts inventory sebesar 20%",
+            "Koordinasi intensif dengan maintenance team untuk equipment availability",
+            "Setup command center untuk monitoring real-time 24/7"
+        ]
+    else:  # Balanced
+        return [
+            "Jalankan rencana produksi sesuai baseline schedule",
+            "Monitor key performance indicators (KPIs) setiap shift",
+            "Lakukan tactical adjustments maksimal ±15% berdasarkan kondisi lapangan",
+            "Koordinasi weekly planning meeting dengan semua department",
+            "Implementasikan continuous improvement process untuk operational excellence"
+        ]
+
+def _get_strengths(plan_name: str, financial_impact: Dict, schedule: List[Dict]) -> List[str]:
+    strengths = []
+    savings = financial_impact.get('cost_savings_usd', 0)
+    risk_score = financial_impact.get('avg_risk_score', 0.5)
+    total_days = len(schedule)
+    
+    if schedule:
+        total_original = sum(d.get('original_production_ton', 0) for d in schedule)
+        total_optimized = sum(d.get('optimized_production_ton', 0) for d in schedule)
+        avg_confidence = np.mean([d.get('confidence_score', 0.5) for d in schedule])
+    else:
+        total_original = 0
+        total_optimized = 0
+        avg_confidence = 0.6
+    
+    if "Conservative" in plan_name:
+        strengths.append("Fokus utama pada operational safety dan risk mitigation")
+        strengths.append(f"Potensi penghematan biaya: ${abs(savings):,.0f}")
+        strengths.append("Mengurangi exposure terhadap market volatility")
+        strengths.append(f"Tingkat keyakinan operasional rata-rata: {avg_confidence:.2f}")
+        
+    elif "Aggressive" in plan_name:
+        strengths.append("Maximizes production capacity utilization")
+        strengths.append(f"Peningkatan output: {(total_optimized/total_original*100-100):.1f}%")
+        strengths.append("Capitalizes on favorable market conditions")
+        strengths.append(f"Confidence level maintained at {avg_confidence:.2f}")
+        
+    else:  # Balanced
+        strengths.append("Optimal balance between production targets and risk management")
+        strengths.append("Provides operational flexibility for dynamic adjustments")
+        strengths.append("Maintains consistent production flow")
+        strengths.append(f"Stable confidence score: {avg_confidence:.2f}")
+    
+    strengths.append(f"Analysis based on {total_days}-day operational data")
+    strengths.append(f"Risk exposure score: {risk_score:.2f} (scale 0-1)")
+    return strengths
+
+def _get_limitations(plan_name: str, financial_impact: Dict, total_days: int) -> List[str]:
+    limitations = []
+    risk_score = financial_impact.get('avg_risk_score', 0.5)
+    savings = financial_impact.get('cost_savings_usd', 0)
+    
+    if "Conservative" in plan_name:
+        limitations.append("Potential underutilization of production capacity during optimal conditions")
+        limitations.append("May not meet surge demand opportunities")
+        limitations.append("Higher unit cost due to reduced economies of scale")
+        
+    elif "Aggressive" in plan_name:
+        limitations.append(f"Higher operational risk exposure ({risk_score:.2f} risk score)")
+        limitations.append("Increased maintenance frequency and costs")
+        limitations.append("Higher stress on equipment and personnel")
+        
+    else:  # Balanced
+        limitations.append("May be too conservative during highly favorable conditions")
+        limitations.append("Opportunity cost of not maximizing production during peaks")
+        limitations.append("Requires continuous monitoring and adjustment")
+    
+    limitations.append(f"Based on {total_days} days of historical data projection")
+    limitations.append("Using standard cost model ($30/ton operational cost)")
+    limitations.append("Assumes consistent equipment availability and workforce")
+    return limitations
+
+def _generate_detailed_justification(plan_name: str, financial_impact: Dict, schedule: List[Dict]) -> str:
+    """Generate detailed justification (3-4 paragraf)"""
+    total_days = len(schedule)
+    savings = financial_impact.get('cost_savings_usd', 0)
+    baseline_cost = financial_impact.get('baseline_total_cost_usd', 0)
+    optimized_cost = financial_impact.get('optimized_total_cost_usd', 0)
+    risk_score = financial_impact.get('avg_risk_score', 0.5)
+    
+    # Hitung statistik dari schedule
+    if schedule:
+        total_original = sum(d.get('original_production_ton', 0) for d in schedule)
+        total_optimized = sum(d.get('optimized_production_ton', 0) for d in schedule)
+        avg_adjustment = np.mean([d.get('adjustment_pct', 0) for d in schedule])
+        avg_confidence = np.mean([d.get('confidence_score', 0.5) for d in schedule])
+        
+        # Hitung hari dengan adjustment positif/negatif
+        negative_days = sum(1 for d in schedule if d.get('adjustment_pct', 0) < 0)
+        positive_days = sum(1 for d in schedule if d.get('adjustment_pct', 0) > 0)
+        neutral_days = total_days - negative_days - positive_days
+    else:
+        total_original = 0
+        total_optimized = 0
+        avg_adjustment = 0
+        avg_confidence = 0.6
+        negative_days = 0
+        positive_days = 0
+        neutral_days = 0
+    
+    if "Conservative" in plan_name:
+        return f"""Rencana Operasi Konservatif ini dirancang khusus untuk memastikan stabilitas dan keberlanjutan operasi pertambangan selama {total_days} hari ke depan. Strategi ini mengutamakan prinsip kehati-hatian dengan mengurangi target produksi rata-rata sebesar {abs(avg_adjustment):.1f}%, terutama pada hari-hari dengan tingkat kepastian rendah.
+
+Dari total {total_days} hari operasi, sebanyak {negative_days} hari mengalami penurunan target produksi sebagai langkah antisipatif terhadap potensi risiko operasional. Pendekatan ini menghasilkan penghematan biaya operasional sebesar ${savings:,.0f}, dari baseline ${baseline_cost:,.0f} menjadi ${optimized_cost:,.0f}. Meskipun volume produksi turun dari {total_original:,.0f} ton menjadi {total_optimized:,.0f} ton, rencana ini menjamin kontinuitas operasi dengan skor risiko hanya {risk_score:.2f} dan tingkat keyakinan rata-rata {avg_confidence:.2f}.
+
+Rencana ini sangat direkomendasikan untuk periode dengan ketidakpastian tinggi, fluktuasi harga komoditas, atau ketika fokus utama adalah menjaga kesehatan peralatan dan keselamatan pekerja. Implementasi dapat dilakukan segera dengan penjadwalan ulang prioritas pit dan alokasi sumber daya yang lebih efisien."""
+    
+    elif "Aggressive" in plan_name:
+        return f"""Rencana Operasi Agresif ini dirancang untuk memaksimalkan potensi produksi tambang dalam periode {total_days} hari mendatang. Strategi ini mengoptimalkan setiap kesempatan dengan meningkatkan target produksi rata-rata sebesar {avg_adjustment:.1f}%, terutama pada hari-hari dengan kondisi operasional optimal.
+
+Dari {total_days} hari operasi, sebanyak {positive_days} hari mengalami peningkatan target produksi untuk mengejar peluang pasar. Pendekatan ini memerlukan investasi tambahan sebesar ${abs(savings):,.0f}, meningkatkan biaya operasional dari ${baseline_cost:,.0f} menjadi ${optimized_cost:,.0f}. Volume produksi meningkat signifikan dari {total_original:,.0f} ton menjadi {total_optimized:,.0f} ton, dengan menerima risiko operasional {risk_score:.2f} dan tingkat keyakinan rata-rata {avg_confidence:.2f}.
+
+Rencana ini cocok untuk periode permintaan pasar tinggi, ketersediaan peralatan optimal, atau ketika ada target produksi kuartalan/tahunan yang harus dipenuhi. Perlu kesiapan tim maintenance dan monitoring intensif untuk memastikan keberhasilan implementasi."""
+    
+    else:  # Balanced Plan
+        return f"""Rencana Operasi Seimbang ini menawarkan pendekatan moderat selama {total_days} hari operasi mendatang. Strategi ini menjaga target produksi baseline sambil melakukan penyesuaian dinamis berdasarkan kondisi aktual, dengan rata-rata perubahan {avg_adjustment:.1f}%.
+
+Dari {total_days} hari operasi, {neutral_days} hari beroperasi sesuai rencana awal, sementara {positive_days} hari ditingkatkan dan {negative_days} hari dikurangi targetnya. Biaya operasional tetap di ${optimized_cost:,.0f} dengan skor risiko terkendali sebesar {risk_score:.2f}. Volume produksi total {total_optimized:,.0f} ton dihasilkan dengan tingkat keyakinan rata-rata {avg_confidence:.2f}, menunjukkan keseimbangan antara pencapaian target dan manajemen risiko.
+
+Rencana ini ideal untuk operasi rutin dengan fluktuasi kondisi yang dapat diprediksi. Fleksibilitas dalam implementasi memungkinkan penyesuaian cepat berdasarkan perkembangan real-time di lapangan tanpa mengorbankan stabilitas operasional."""
