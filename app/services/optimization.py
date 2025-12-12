@@ -445,38 +445,22 @@ Gunakan bahasa yang profesional namun mudah dipahami. Jangan gunakan format mark
         return f"Penjelasan otomatis gagal: {str(e)}"
 
 # -------------------------
-# Top3 Mining generator
+# Top3 Mining generator - PATCHED
 # -------------------------
 def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Generate 3 optimization plans (Conservative, Balanced, Aggressive) for mining.
-    - predictions: DataFrame expected to contain plan_id, plan_date, planned_production_ton,
-      predicted_production_ton, efficiency_factor, cycle_delay_min, hauling_distance_km, risk_level, etc.
-    - config: LLM config dict for call_groq
-    """
     df = predictions.copy()
-    # Ensure date fields
-    if 'plan_date' in df.columns:
-        df['plan_date'] = pd.to_datetime(df['plan_date'])
-    else:
-        # if plan_date not present, create dummy sequence
-        df['plan_date'] = pd.date_range(start=datetime.now().date(), periods=len(df))
-
+    df['plan_date'] = pd.to_datetime(df['plan_date']) if 'plan_date' in df.columns else pd.date_range(start=datetime.now().date(), periods=len(df))
+    
     executive_summary = _make_executive_summary_mining(df)
 
-    # Define strategy multipliers and risk thresholds
     strategies = [
-        {"id": 1, "name": "Conservative Plan", "prod_multiplier": 0.90, "risk_threshold": 0.7,
-         "description": "Meminimalkan risiko operasional akibat cuaca dan keterlambatan"},
-        {"id": 2, "name": "Balanced Plan", "prod_multiplier": 1.00, "risk_threshold": 0.6,
-         "description": "Menyeimbangkan target produksi dengan pengelolaan risiko yang efektif"},
-        {"id": 3, "name": "Aggressive Plan", "prod_multiplier": 1.10, "risk_threshold": 0.5,
-         "description": "Memaksimalkan volume produksi untuk memenuhi permintaan tinggi"}
+        {"id": 1, "name": "Conservative Plan", "prod_multiplier": 0.90, "risk_threshold": 0.7, "description": "Meminimalkan risiko operasional akibat cuaca dan keterlambatan"},
+        {"id": 2, "name": "Balanced Plan", "prod_multiplier": 1.00, "risk_threshold": 0.6, "description": "Menyeimbangkan target produksi dengan pengelolaan risiko yang efektif"},
+        {"id": 3, "name": "Aggressive Plan", "prod_multiplier": 1.10, "risk_threshold": 0.5, "description": "Memaksimalkan volume produksi untuk memenuhi permintaan tinggi"}
     ]
 
     recommendations = []
 
-    # For financial calcs use simple baseline/optimized cost model
     for s in strategies:
         optimized_schedule = []
         total_baseline_cost = 0.0
@@ -484,30 +468,17 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
         total_risk_score = 0.0
 
         for idx, row in df.iterrows():
-            # compute confidence from available signals
-            conf_items = []
-            if 'efficiency_factor' in row and not pd.isna(row['efficiency_factor']):
-                conf_items.append(row['efficiency_factor'])
-            if 'confidence_score' in row and not pd.isna(row['confidence_score']):
-                conf_items.append(row['confidence_score'])
-            # fallback
+            conf_items = [v for v in [row.get('efficiency_factor'), row.get('confidence_score')] if v is not None]
             overall_conf = float(np.mean(conf_items)) if conf_items else 0.6
 
-            # adjust production according to overall_conf and strategy multiplier
-            if overall_conf < s['risk_threshold']:
-                adj_multiplier = s['prod_multiplier'] * 0.8
-                rationale = f"{s['name']}: Reduced due to risk"
-            else:
-                adj_multiplier = s['prod_multiplier']
-                rationale = f"{s['name']}: Operating normally"
+            adj_multiplier = s['prod_multiplier'] * (0.8 if overall_conf < s['risk_threshold'] else 1.0)
+            rationale = f"{s['name']}: Reduced due to risk" if overall_conf < s['risk_threshold'] else f"{s['name']}: Operating normally"
 
             original_prod = float(row.get('planned_production_ton', 0.0))
             adjusted_prod = round(original_prod * adj_multiplier, 0)
 
-            # basic financial model (dummy)
             baseline_cost = original_prod * 30.0
             optimized_cost = adjusted_prod * 30.0
-
             total_baseline_cost += baseline_cost
             total_optimized_cost += optimized_cost
             total_risk_score += (1.0 - overall_conf)
@@ -515,25 +486,21 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
             optimized_schedule.append({
                 "date": str(row['plan_date'].date()),
                 "plan_id": row.get('plan_id'),
-                "original_production_ton": round(float(original_prod), 0),
+                "original_production_ton": int(original_prod),
                 "optimized_production_ton": int(adjusted_prod),
                 "adjustment_pct": round(((adjusted_prod - original_prod) / original_prod * 100) if original_prod > 0 else 0, 2),
                 "baseline_cost_usd": round(float(baseline_cost), 2),
                 "optimized_cost_usd": round(float(optimized_cost), 2),
-                "confidence_score": round(float(overall_conf), 2),
+                "confidence_score": round(overall_conf, 2),
                 "weather_condition": f"Hujan (avg): {row.get('avg_rain_mm', 0)}mm, Angin (max): {row.get('max_wind_kmh', 0)}km/h",
                 "rationale": rationale
             })
 
-        num_days = len(df)
-        avg_risk_score = (total_risk_score / num_days) if num_days > 0 else 0.0
-        cost_savings = round(float(total_baseline_cost - total_optimized_cost), 2)
-
         financial_impact = {
-            "baseline_total_cost_usd": round(float(total_baseline_cost), 2),
-            "optimized_total_cost_usd": round(float(total_optimized_cost), 2),
-            "cost_savings_usd": cost_savings,
-            "avg_risk_score": round(float(avg_risk_score), 2)
+            "baseline_total_cost_usd": round(total_baseline_cost, 2),
+            "optimized_total_cost_usd": round(total_optimized_cost, 2),
+            "cost_savings_usd": round(total_baseline_cost - total_optimized_cost, 2),
+            "avg_risk_score": round(total_risk_score / len(df), 2) if len(df) > 0 else 0.0
         }
 
         plan_obj = {
@@ -547,93 +514,51 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
                 "Monitor weather updates daily",
                 "Adjust operations based on real-time conditions"
             ],
-            "strengths": [
-                "Strength example 1",
-                "Strength example 2"
-            ],
-            "limitations": [
-                "Limitation example 1",
-                "Limitation example 2"
-            ]
+            "strengths": [],
+            "limitations": []
         }
 
-        # --- PATCH: enrich strengths/limitations/implementation_steps using AI helpers ---
-        # Build minimal plan_data structure for helper calls (keeps variable names intact)
+        # --- PATCH: populate strengths & limitations safely ---
+        plan_data_for_ai = {"strategy": plan_obj['plan_name'], "schedule": plan_obj['optimized_schedule'], "financial": plan_obj['financial_impact']}
         try:
-            plan_data_for_ai = {
-                "strategy": plan_obj.get("plan_name"),
-                "schedule": plan_obj.get("optimized_schedule"),
-                "financial": plan_obj.get("financial_impact")
-            }
-
-            # call helpers (they may be real AI wrappers or fallback deterministic functions)
-            try:
-                plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="mining", config=config)
-            except Exception as e:
-                # safe fallback keep existing examples
-                plan_obj["strengths"] = plan_obj.get("strengths", ["Strength example 1", "Strength example 2"])
-
-            try:
-                plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="mining", config=config)
-            except Exception as e:
-                plan_obj["limitations"] = plan_obj.get("limitations", ["Limitation example 1", "Limitation example 2"])
-
-            try:
-                # If helper returns steps, replace; otherwise keep default
-                steps_generated = generate_steps_ai(plan_data_for_ai, domain="mining", config=config)
-                if isinstance(steps_generated, list) and len(steps_generated) > 0:
-                    plan_obj["implementation_steps"] = steps_generated
-            except Exception as e:
-                # keep default hardcoded steps
-                pass
+            plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="mining", config=config)
         except Exception:
-            # in worst case, keep defaults
-            pass
-        # --- /PATCH ---------------------------------------------------------------
+            plan_obj["strengths"] = ["Strength example fallback"]
 
-        # Add AI justification using RAG + LLM (best-effort, safe fallback)
+        try:
+            plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="mining", config=config)
+        except Exception:
+            plan_obj["limitations"] = ["Limitation example fallback"]
+
+        # --- PATCH: generate justification after strengths & limitations ---
         try:
             plan_obj['justification'] = generate_ai_description_mining(plan_obj, config)
-        except Exception as e:
-            plan_obj['justification'] = f"AI justification failed: {str(e)}"
+        except Exception:
+            plan_obj['justification'] = "AI justification fallback"
 
         recommendations.append(plan_obj)
 
-    mining_plan = {
+    return {
         "plan_type": "RENCANA OPTIMASI PERTAMBANGAN",
         "generated_at": datetime.now().isoformat(),
         "executive_summary": executive_summary,
         "recommendations": recommendations
     }
 
-    return mining_plan
 
 # -------------------------
-# Top3 Shipping generator
+# Top3 Shipping generator - PATCHED
 # -------------------------
 def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Generate 3 optimization plans (Conservative, Balanced, Aggressive) for shipping.
-    - predictions: DataFrame expected to contain shipment_id, eta_date, planned_volume_ton,
-      predicted_loading_hours, loading_efficiency, predicted_demurrage_cost, risk_level, etc.
-    - config: LLM config dict for call_groq
-    """
     df = predictions.copy()
-    # Ensure eta_date
-    if 'eta_date' in df.columns:
-        df['eta_date'] = pd.to_datetime(df['eta_date'])
-    else:
-        df['eta_date'] = pd.date_range(start=datetime.now().date(), periods=len(df))
+    df['eta_date'] = pd.to_datetime(df['eta_date']) if 'eta_date' in df.columns else pd.date_range(start=datetime.now().date(), periods=len(df))
 
     executive_summary = _make_executive_summary_shipping(df)
 
     strategies = [
-        {"id": 1, "name": "Conservative Plan", "ship_multiplier": 0.95, "risk_threshold": 0.7,
-         "description": "Minimalkan biaya demurrage dan keterlambatan akibat cuaca"},
-        {"id": 2, "name": "Balanced Plan", "ship_multiplier": 1.00, "risk_threshold": 0.6,
-         "description": "Optimalkan revenue sambil mengelola risiko demurrage dan cuaca"},
-        {"id": 3, "name": "Aggressive Plan", "ship_multiplier": 1.10, "risk_threshold": 0.5,
-         "description": "Maksimalkan revenue pengiriman dan utilisasi kapal"}
+        {"id": 1, "name": "Conservative Plan", "ship_multiplier": 0.95, "risk_threshold": 0.7, "description": "Minimalkan biaya demurrage dan keterlambatan akibat cuaca"},
+        {"id": 2, "name": "Balanced Plan", "ship_multiplier": 1.00, "risk_threshold": 0.6, "description": "Optimalkan revenue sambil mengelola risiko demurrage dan cuaca"},
+        {"id": 3, "name": "Aggressive Plan", "ship_multiplier": 1.10, "risk_threshold": 0.5, "description": "Maksimalkan revenue pengiriman dan utilisasi kapal"}
     ]
 
     recommendations = []
@@ -646,26 +571,17 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
         total_risk_score = 0.0
 
         for idx, row in df.iterrows():
-            conf_items = []
-            if 'loading_efficiency' in row and not pd.isna(row['loading_efficiency']):
-                conf_items.append(row['loading_efficiency'])
-            if 'confidence_score' in row and not pd.isna(row['confidence_score']):
-                conf_items.append(row['confidence_score'])
+            conf_items = [v for v in [row.get('loading_efficiency'), row.get('confidence_score')] if v is not None]
             overall_conf = float(np.mean(conf_items)) if conf_items else 0.6
 
-            if overall_conf < s['risk_threshold']:
-                adj_multiplier = s['ship_multiplier'] * 0.85
-                rationale = f"{s['name']}: Reduced due to risk"
-            else:
-                adj_multiplier = s['ship_multiplier']
-                rationale = f"{s['name']}: Operating normally"
+            adj_multiplier = s['ship_multiplier'] * (0.85 if overall_conf < s['risk_threshold'] else 1.0)
+            rationale = f"{s['name']}: Reduced due to risk" if overall_conf < s['risk_threshold'] else f"{s['name']}: Operating normally"
 
             original_ship = float(row.get('planned_volume_ton', row.get('total_volume_ton', 0)))
             adjusted_ship = round(original_ship * adj_multiplier, 0)
 
             baseline_revenue = original_ship * 65.0
             optimized_revenue = adjusted_ship * 65.0
-
             demurrage_cost = float(row.get('predicted_demurrage_cost', row.get('total_demurrage_cost_usd', 0)))
             demurrage_saved = demurrage_cost * (1 - (adj_multiplier if adj_multiplier < 1 else 1))
 
@@ -677,26 +593,23 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
             optimized_schedule.append({
                 "date": str(row['eta_date'].date()),
                 "shipment_id": row.get('shipment_id'),
-                "original_shipping_ton": round(float(original_ship), 0),
+                "original_shipping_ton": int(original_ship),
                 "optimized_shipping_ton": int(adjusted_ship),
                 "adjustment_pct": round(((adjusted_ship - original_ship) / original_ship * 100) if original_ship > 0 else 0, 2),
                 "baseline_revenue_usd": round(float(baseline_revenue), 2),
                 "optimized_revenue_usd": round(float(optimized_revenue), 2),
                 "demurrage_cost_usd": round(float(demurrage_cost), 2),
-                "confidence_score": round(float(overall_conf), 2),
+                "confidence_score": round(overall_conf, 2),
                 "weather_condition": f"Angin (max): {row.get('max_wind_kmh', 0)}km/h",
                 "rationale": rationale
             })
 
-        num_days = len(df)
-        avg_risk_score = (total_risk_score / num_days) if num_days > 0 else 0.0
-
         financial_impact = {
-            "baseline_total_revenue_usd": round(float(total_baseline_revenue), 2),
-            "optimized_total_revenue_usd": round(float(total_optimized_revenue), 2),
-            "revenue_change_usd": round(float(total_optimized_revenue - total_baseline_revenue), 2),
-            "demurrage_savings_usd": round(float(total_demurrage_saved), 2),
-            "avg_risk_score": round(float(avg_risk_score), 2)
+            "baseline_total_revenue_usd": round(total_baseline_revenue, 2),
+            "optimized_total_revenue_usd": round(total_optimized_revenue, 2),
+            "revenue_change_usd": round(total_optimized_revenue - total_baseline_revenue, 2),
+            "demurrage_savings_usd": round(total_demurrage_saved, 2),
+            "avg_risk_score": round(total_risk_score / len(df), 2) if len(df) > 0 else 0.0
         }
 
         plan_obj = {
@@ -710,58 +623,33 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                 "Monitor weather updates daily",
                 "Adjust berth allocation as needed"
             ],
-            "strengths": [
-                "Strength example 1",
-                "Strength example 2"
-            ],
-            "limitations": [
-                "Limitation example 1",
-                "Limitation example 2"
-            ]
+            "strengths": [],
+            "limitations": []
         }
 
-        # --- PATCH: enrich strengths/limitations/implementation_steps using AI helpers (shipping) ---
+        # --- PATCH: populate strengths & limitations safely ---
+        plan_data_for_ai = {"strategy": plan_obj['plan_name'], "schedule": plan_obj['optimized_schedule'], "financial": plan_obj['financial_impact']}
         try:
-            plan_data_for_ai = {
-                "strategy": plan_obj.get("plan_name"),
-                "schedule": plan_obj.get("optimized_schedule"),
-                "financial": plan_obj.get("financial_impact")
-            }
-
-            # call helpers
-            try:
-                plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="shipping", config=config)
-            except Exception:
-                plan_obj["strengths"] = plan_obj.get("strengths", ["Strength example 1", "Strength example 2"])
-
-            try:
-                plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="shipping", config=config)
-            except Exception:
-                plan_obj["limitations"] = plan_obj.get("limitations", ["Limitation example 1", "Limitation example 2"])
-
-            try:
-                steps_generated = generate_steps_ai(plan_data_for_ai, domain="shipping", config=config)
-                if isinstance(steps_generated, list) and len(steps_generated) > 0:
-                    plan_obj["implementation_steps"] = steps_generated
-            except Exception:
-                pass
+            plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="shipping", config=config)
         except Exception:
-            pass
-        # --- /PATCH ---------------------------------------------------------------
+            plan_obj["strengths"] = ["Strength example fallback"]
 
-        # Add AI justification using RAG + LLM
+        try:
+            plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="shipping", config=config)
+        except Exception:
+            plan_obj["limitations"] = ["Limitation example fallback"]
+
+        # --- PATCH: generate justification after strengths & limitations ---
         try:
             plan_obj['justification'] = generate_ai_description_shipping(plan_obj, config)
-        except Exception as e:
-            plan_obj['justification'] = f"AI justification failed: {str(e)}"
+        except Exception:
+            plan_obj['justification'] = "AI justification fallback"
 
         recommendations.append(plan_obj)
 
-    shipping_plan = {
+    return {
         "plan_type": "RENCANA OPTIMASI PENGIRIMAN",
         "generated_at": datetime.now().isoformat(),
         "executive_summary": executive_summary,
         "recommendations": recommendations
     }
-
-    return shipping_plan
