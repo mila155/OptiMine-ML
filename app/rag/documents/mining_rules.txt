@@ -1,0 +1,32 @@
+Mining production is influenced by:
+- Planned Production (ton/day)
+- Hauling Distance (km)
+- Weather factors: precipitation, wind, cloud cover, temperature
+- Priority score (human + AI)
+- Equipment availability and operational efficiency
+- Pit configuration and geology
+
+General rules:
+1. Efficiency typically ranges 0.65 – 0.92.
+2. High rainfall (> 20 mm/day) significantly reduces production.
+3. Wind < 30 km/h has minimal impact on mining operations.
+4. AI Priority Score:
+   - 2 = High
+   - 1 = Medium
+   - 0 = Low
+5. High-priority pits should be sequenced earlier in the day.
+6. Cycle delay increases when:
+   - Hauling distance is long
+   - Weather is poor
+   - Traffic congestion increases (multiple pits hauling to same ROM)
+
+Risk levels:
+- HIGH    → Efficiency < 0.70 or rain > 20 mm
+- MEDIUM  → Efficiency 0.70–0.85 or rain 10–20 mm
+- LOW     → Efficiency > 0.85 and rain < 10 mm
+
+Mining Planner cares about:
+- Production gap
+- Pit scheduling
+- Efficiency predictions
+- Weather impact on mining performance
