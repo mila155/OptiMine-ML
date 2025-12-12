@@ -1,0 +1,19 @@
+Efficiency Factor prediction considers:
+- Planned production vs predicted
+- Weather
+- Hauling distance
+- Cycle delay variation
+
+Typical efficiency range: 0.65–0.92
+
+Cycle Delay increases when:
+- Hauling distance is long
+- Multiple pits share same ROM
+- Bad weather
+- Hauler shortage
+- Queueing events
+
+Delay categories:
+- Normal: 1–2 min
+- Moderate: 2–3.5 min
+- High: > 3.5 min
