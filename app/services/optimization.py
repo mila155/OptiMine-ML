@@ -23,7 +23,101 @@ except Exception:
     _OPT_AI_AVAILABLE = False
 
     def generate_strengths_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
-        # Simple heuristic-based strengths generator (fallback)
+        """Enhanced fallback strengths generator"""
+        strengths = []
+        plan_name = plan_data.get("strategy", "")
+        schedule = plan_data.get("schedule", [])
+        financial = plan_data.get("financial", {})
+        
+        # Hitung metrics dari data
+        total_days = len(schedule) if schedule else 0
+        avg_conf = np.mean([s.get('confidence_score', 0.5) for s in schedule]) if schedule else 0.6
+        savings = financial.get('cost_savings_usd', 0)
+        risk_score = financial.get('avg_risk_score', 0.5)
+        
+        if "Conservative" in plan_name:
+            strengths.append(f"Fokus pada mitigasi risiko dan stabilitas operasional")
+            if savings > 0:
+                strengths.append(f"Penghematan biaya sebesar ${savings:,.0f}")
+            strengths.append(f"Mengurangi ketergantungan pada kondisi cuaca ekstrem")
+            strengths.append(f"Rata-rata confidence score {avg_conf:.2f} menunjukkan prediktabilitas baik")
+            
+        elif "Aggressive" in plan_name:
+            strengths.append(f"Maksimalisasi output produksi untuk permintaan tinggi")
+            strengths.append(f"Pemanfaatan optimal kapasitas alat berat")
+            if savings < 0:  # negative savings berarti peningkatan cost = investasi
+                strengths.append(f"Investasi tambahan ${abs(savings):,.0f} untuk pencapaian target tinggi")
+            strengths.append(f"Target produksi ditingkatkan 10% pada hari optimal")
+            
+        else:  # Balanced
+            strengths.append(f"Keseimbangan optimal antara target produksi dan manajemen risiko")
+            strengths.append(f"Fleksibilitas dalam menyesuaikan operasi harian")
+            strengths.append(f"Mempertahankan efisiensi operasional rata-rata {avg_conf:.2f}")
+            
+        strengths.append(f"Dikalkulasi berdasarkan {total_days} hari operasi")
+        return strengths
+
+    def generate_limitations_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
+        """Enhanced fallback limitations generator"""
+        limitations = []
+        plan_name = plan_data.get("strategy", "")
+        schedule = plan_data.get("schedule", [])
+        financial = plan_data.get("financial", {})
+        
+        total_days = len(schedule) if schedule else 0
+        risk_score = financial.get('avg_risk_score', 0.5)
+        
+        if "Conservative" in plan_name:
+            limitations.append("Produktivitas lebih rendah karena target yang dikurangi")
+            limitations.append("Potensi underutilization sumber daya pada hari optimal")
+            limitations.append("Mungkin tidak memenuhi permintaan pasar yang tinggi")
+            
+        elif "Aggressive" in plan_name:
+            limitations.append(f"Risiko operasional lebih tinggi (skor risiko: {risk_score:.2f})")
+            limitations.append("Konsumsi bahan bakar dan maintenance cost meningkat")
+            limitations.append("Stres pada peralatan dan operator lebih besar")
+            
+        else:  # Balanced
+            limitations.append("Perlu monitoring intensif untuk keseimbangan optimal")
+            limitations.append("Mungkin terlalu hati-hati pada kondisi sangat baik")
+            limitations.append("Margin keuntungan tidak dimaksimalkan sepenuhnya")
+            
+        limitations.append(f"Analisis berdasarkan {total_days} hari data historis")
+        limitations.append("Menggunakan model biaya dasar ($30 per ton)")
+        
+        return limitations
+
+    def generate_steps_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
+        """Enhanced fallback implementation steps"""
+        plan_name = plan_data.get("strategy", "")
+        
+        if "Conservative" in plan_name:
+            return [
+                "Kurangi target produksi 10-28% pada hari dengan confidence score < 0.7",
+                "Prioritaskan maintenance dan safety check sebelum operasi",
+                "Monitor kondisi cuaca secara real-time setiap 2 jam",
+                "Siapkan backup equipment untuk antisipasi breakdown",
+                "Lakukan daily briefing untuk tim tentang prioritas safety"
+            ]
+            
+        elif "Aggressive" in plan_name:
+            return [
+                "Tingkatkan shift operasional dari 2 menjadi 3 shift per hari",
+                "Optimalkan routing hauling untuk minimize delay",
+                "Perpanjang jam operasional equipment dengan rotation crew",
+                "Monitor equipment health setiap 4 jam untuk preventif maintenance",
+                "Siapkan buffer stock spare parts untuk minimal downtime"
+            ]
+            
+        else:  # Balanced
+            return [
+                "Implementasikan rencana sesuai jadwal produksi baseline",
+                "Monitor key performance indicators (KPIs) harian",
+                "Lakukan adjustment maksimal ±15% berdasarkan kondisi aktual",
+                "Koordinasi dengan maintenance team untuk preventive schedule",
+                "Evaluasi hasil harian dan adjust untuk hari berikutnya"
+            ]   
+        # Simple    heuristic-based strengths generator (fallback)
         strengths = []
         fin = plan_data.get("financial", {}) if isinstance(plan_data, dict) else plan_data.get('financial_impact', {})
         conf_scores = [s.get('confidence_score', 0.5) for s in plan_data.get("schedule", [])] if plan_data.get("schedule") else []
@@ -36,7 +130,7 @@ except Exception:
             strengths.append("Menunjukkan potensi penghematan biaya")
         strengths.append("Struktur rencana mudah dipahami")
         return strengths
-
+    
     def generate_limitations_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
         # Simple heuristic-based limitations generator (fallback)
         limitations = []
@@ -611,6 +705,45 @@ Gunakan bahasa yang profesional namun mudah dipahami. Jangan gunakan format mark
         print(f"❌ Error in generate_ai_description_shipping: {e}")
         return _generate_shipping_justification(plan_data)
 
+def _generate_detailed_manual_justification(plan_data: Dict[str, Any]) -> str:
+    """Detailed manual justification for mining plans"""
+    plan_name = plan_data.get('plan_name', '')
+    financial = plan_data.get('financial_impact', {})
+    schedule = plan_data.get('optimized_schedule', [])
+    
+    total_days = len(schedule)
+    savings = financial.get('cost_savings_usd', 0)
+    baseline_cost = financial.get('baseline_total_cost_usd', 0)
+    optimized_cost = financial.get('optimized_total_cost_usd', 0)
+    risk_score = financial.get('avg_risk_score', 0.5)
+    
+    # Hitung adjustment rata-rata
+    if schedule:
+        avg_adjustment = np.mean([abs(d.get('adjustment_pct', 0)) for d in schedule])
+    else:
+        avg_adjustment = 0
+    
+    if "Conservative" in plan_name:
+        return f"""Rencana konservatif ini dirancang untuk operasi pertambangan yang stabil dan aman selama {total_days} hari. Strategi ini mengurangi target produksi rata-rata {avg_adjustment:.1f}% untuk mengantisipasi risiko operasional seperti kondisi cuaca buruk, delay peralatan, dan faktor ketidakpastian lainnya.
+
+Dengan pendekatan ini, biaya operasional dapat dikurangi dari ${baseline_cost:,.0f} menjadi ${optimized_cost:,.0f}, menghasilkan penghematan sebesar ${savings:,.0f}. Meskipun output produksi lebih rendah, rencana ini memastikan keberlanjutan operasi dengan skor risiko rata-rata hanya {risk_score:.2f} pada skala 0-1.
+
+Rencana ini sangat direkomendasikan untuk periode dengan prediksi cuaca tidak menentu, ketersediaan peralatan terbatas, atau ketika safety menjadi prioritas utama. Implementasi dapat dimulai segera dengan penyesuaian target harian berdasarkan monitoring real-time."""
+
+    elif "Aggressive" in plan_name:
+        return f"""Rencana agresif ini memaksimalkan potensi produksi tambang selama {total_days} hari dengan meningkatkan target rata-rata {avg_adjustment:.1f}%. Strategi ini cocok untuk memanfaatkan kondisi optimal seperti cuaca baik, ketersediaan peralatan penuh, dan permintaan pasar yang tinggi.
+
+Biaya operasional meningkat dari ${baseline_cost:,.0f} menjadi ${optimized_cost:,.0f}, yang merupakan investasi untuk pencapaian target produksi maksimal. Dengan skor risiko {risk_score:.2f}, rencana ini menerima risiko moderat untuk mendapatkan keuntungan yang lebih besar.
+
+Rencana ini direkomendasikan ketika kondisi operasional sangat mendukung dan ada tekanan untuk mencapai target kuartalan atau tahunan. Perlu monitoring intensif dan readiness plan untuk menangani potensi gangguan."""
+
+    else:  # Balanced
+        return f"""Rencana seimbang ini menjaga target produksi baseline sambil mengoptimalkan alokasi sumber daya selama {total_days} hari. Strategi ini menyeimbangkan antara pencapaian target dan manajemen risiko dengan penyesuaian dinamis berdasarkan kondisi aktual.
+
+Biaya operasional tetap di ${optimized_cost:,.0f} dengan skor risiko {risk_score:.2f}, menunjukkan keseimbangan yang baik antara efisiensi biaya dan pencapaian target. Rencana ini ideal untuk operasi rutin dengan stabilitas yang terjaga.
+
+Direkomendasikan untuk operasi harian dengan fluktuasi kondisi yang dapat diprediksi. Fleksibilitas dalam implementasi memungkinkan penyesuaian cepat berdasarkan perkembangan di lapangan."""
+    
 # -------------------------
 # Top3 Mining generator - PATCHED
 # -------------------------
@@ -685,32 +818,50 @@ def generate_top3_mining_plans(predictions: pd.DataFrame, config: Dict[str, Any]
             "limitations": []
         }
 
-        # --- PATCH: populate strengths & limitations safely ---
-        plan_data_for_ai = {"strategy": plan_obj['plan_name'], "schedule": plan_obj['optimized_schedule'], "financial": plan_obj['financial_impact']}
-        try:
-            plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="mining", config=config)
-        except Exception:
-            plan_obj["strengths"] = ["Strength example fallback"]
+       # --- PATCH: populate strengths & limitations safely ---
+        plan_data_for_ai = {
+            "strategy": plan_obj['plan_name'], 
+            "schedule": plan_obj['optimized_schedule'], 
+            "financial": plan_obj['financial_impact']
+        }
 
         try:
+            print(f"🔄 Calling AI strengths for: {plan_obj['plan_name']}")
+            plan_obj["strengths"] = generate_strengths_ai(plan_data_for_ai, domain="mining", config=config)
+            print(f"✅ Strengths generated: {len(plan_obj['strengths'])} items")
+        except Exception as e:
+            print(f"❌ AI strengths failed: {e}")
+            # Enhanced fallback
+            plan_obj["strengths"] = [
+                f"{plan_obj['plan_name']} dirancang untuk optimalisasi operasional",
+                f"Mempertimbangkan {len(plan_obj['optimized_schedule'])} hari operasi",
+                f"Skor risiko rata-rata: {plan_obj['financial_impact']['avg_risk_score']:.2f}",
+                "Berdasarkan analisis data historis dan prediktif"
+            ]
+
+        try:
+            print(f"🔄 Calling AI limitations for: {plan_obj['plan_name']}")
             plan_obj["limitations"] = generate_limitations_ai(plan_data_for_ai, domain="mining", config=config)
-        except Exception:
-            plan_obj["limitations"] = ["Limitation example fallback"]
+            print(f"✅ Limitations generated: {len(plan_obj['limitations'])} items")
+        except Exception as e:
+            print(f"❌ AI limitations failed: {e}")
+            # Enhanced fallback
+            plan_obj["limitations"] = [
+                "Analisis menggunakan asumsi biaya operasional standar",
+                "Tidak memperhitungkan force majeure atau gangguan ekstrem",
+                f"Didasarkan pada {len(plan_obj['optimized_schedule'])} sampel data",
+                "Perlu validasi lapangan untuk kondisi spesifik site"
+            ]
 
         # --- PATCH: generate justification after strengths & limitations ---
         try:
+            print(f"🔄 Calling AI justification for: {plan_obj['plan_name']}")
             plan_obj['justification'] = generate_ai_description_mining(plan_obj, config)
-        except Exception:
-            plan_obj['justification'] = _generate_manual_justification(plan_obj)
-
-        recommendations.append(plan_obj)
-
-    return {
-        "plan_type": "RENCANA OPTIMASI PERTAMBANGAN",
-        "generated_at": datetime.now().isoformat(),
-        "executive_summary": executive_summary,
-        "recommendations": recommendations
-    }
+            print(f"✅ Justification length: {len(plan_obj['justification'])} chars")
+        except Exception as e:
+            print(f"❌ AI justification failed: {e}")
+            # Enhanced fallback
+            plan_obj['justification'] = _generate_detailed_manual_justification(plan_obj)
 
 
 # -------------------------
