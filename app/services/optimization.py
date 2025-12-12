@@ -380,6 +380,59 @@ def _make_executive_summary_shipping(df: pd.DataFrame) -> Dict[str, Any]:
 # AI description helpers (use RAG context inside prompt)
 # -------------------------
 def generate_ai_description_mining(plan_data: Dict[str, Any], config: Dict[str, Any]) -> str:
+    """Generate Indonesian description for mining using AI + RAG"""
+    print(f"🔍 Generating AI description for: {plan_data.get('plan_name')}")
+    
+    rag_context = _safe_get_context(plan_data.get('plan_name', ''), k=6)
+    prompt = f"""
+Gunakan konteks berikut sebagai referensi utama:
+{rag_context}
+
+Kamu adalah asisten AI yang membantu menjelaskan rencana optimasi pertambangan dalam Bahasa Indonesia.
+
+Berdasarkan data berikut:
+- Nama Plan: {plan_data.get('plan_name')}
+- Deskripsi Strategi: {plan_data.get('strategy_description')}
+- Baseline Cost: ${plan_data.get('financial_impact', {}).get('baseline_total_cost_usd', 0):,.0f}
+- Optimized Cost: ${plan_data.get('financial_impact', {}).get('optimized_total_cost_usd', 0):,.0f}
+- Cost Savings: ${plan_data.get('financial_impact', {}).get('cost_savings_usd', 0):,.0f}
+- Risk Score: {plan_data.get('financial_impact', {}).get('avg_risk_score', 0):.2f}
+- Kelebihan: {', '.join(plan_data.get('strengths', []))}
+- Keterbatasan: {', '.join([lim.get('keterbatasan', lim) if isinstance(lim, dict) else lim for lim in plan_data.get('limitations', [])])}
+
+Buatlah penjelasan detail dalam Bahasa Indonesia yang natural dan mudah dipahami (3-4 paragraf) yang mencakup:
+1. Penjelasan singkat tentang rencana pertambangan ini dan tujuannya
+2. Bagaimana rencana ini mempengaruhi operasi pertambangan harian
+3. Analisis dampak finansial terhadap biaya dan potensi penghematan
+4. Mengapa rencana ini direkomendasikan untuk operasi tambang
+
+Gunakan bahasa yang profesional namun mudah dipahami. Jangan gunakan format markdown atau bullet points.
+"""
+    try:
+        print(f"📝 Prompt length: {len(prompt)}")
+        response = call_groq(prompt, config).strip()
+        print(f"✅ AI Response received: {response[:100]}...")
+        
+        if "gagal" in response.lower() or "error" in response.lower():
+            print(f"⚠️ AI returned error: {response}")
+            return _generate_manual_justification(plan_data)
+            
+        return response
+    except Exception as e:
+        print(f"❌ Error in generate_ai_description_mining: {e}")
+        return _generate_manual_justification(plan_data)
+
+def _generate_manual_justification(plan_data: Dict[str, Any]) -> str:
+    """Manual fallback justification"""
+    plan_name = plan_data.get('plan_name', '')
+    savings = plan_data.get('financial_impact', {}).get('cost_savings_usd', 0)
+    
+    if "Conservative" in plan_name:
+        return f"Rencana konservatif berfokus pada mitigasi risiko dengan mengurangi target produksi untuk mengantisipasi kondisi buruk. {'Menghasilkan penghematan biaya.' if savings > 0 else 'Mempertahankan stabilitas operasional.'}"
+    elif "Aggressive" in plan_name:
+        return f"Rencana agresif meningkatkan target produksi untuk memanfaatkan kondisi optimal dengan menerima risiko lebih tinggi. {'Potensi peningkatan revenue.' if savings < 0 else 'Fokus pada pencapaian target maksimal.'}"
+    else:
+        return f"Rencana seimbang menjaga target produksi sambil mengoptimalkan alokasi sumber daya dan manajemen risiko."
     """Generate Indonesian description for mining using AI + RAG (safe fallback)."""
     rag_context = _safe_get_context(plan_data.get('plan_name', ''), k=6)
     prompt = f"""
