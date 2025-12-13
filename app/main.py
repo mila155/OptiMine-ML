@@ -25,6 +25,7 @@ from app.services.route_service import RouteService
 route_service = RouteService()
 
 from app.services.jetty_locations import JETTY_LOCATIONS
+import logging
 
 from app.schemas import (
     PredictionRequest, RAGQuery,
