@@ -160,6 +160,60 @@ class RAGQuery(BaseModel):
     query: str
 
 
+# ==================== CHATBOT SCHEMAS ====================
+
+class ChatRequest(BaseModel):
+    """
+    Request utama untuk endpoint /chat
+    Dipakai oleh chatbot + RAG + session memory
+    """
+    session_id: str = Field(
+        ...,
+        description="Unique chat session ID (dari frontend)"
+    )
+
+    message: str = Field(
+        ...,
+        description="User message / pertanyaan"
+    )
+
+    context_type: Optional[str] = Field(
+        None,
+        description=(
+            "Jenis konteks yang disuntikkan ke chatbot. "
+            "Contoh: mining_summary, shipping_summary, optimization, selected_plan"
+        )
+    )
+
+    context_payload: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Payload data (summary / optimization / selected plan)"
+    )
+
+    role: Optional[str] = Field(
+        None,
+        description="User role, contoh: Mining Planner, Shipping Planner, Supervisor"
+    )
+
+
+class ChatResponse(BaseModel):
+    """
+    Response dari chatbot
+    """
+    answer: str
+    sources: Optional[List[Dict[str, Any]]] = None
+    timestamp: datetime
+
+
+class ChatSessionState(BaseModel):
+    """
+    OPTIONAL (kalau nanti mau simpan ke DB / Redis)
+    """
+    session_id: str
+    last_context_type: Optional[str]
+    last_updated: datetime
+
+
 # ==================== ERROR RESPONSE ====================
 
 class ErrorResponse(BaseModel):

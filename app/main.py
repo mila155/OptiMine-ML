@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from typing import List
 
-from fastapi import FastAPI, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, APIRouter, FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -23,6 +23,9 @@ from app.services.route_service import RouteService
 route_service = RouteService()
 
 from app.services.jetty_locations import JETTY_COORDINATES
+
+from app.services.chatbot_service import ChatbotService
+from app.schemas import ChatRequest, ChatResponse
 
 from app.schemas import (
     PredictionRequest, RAGQuery,
@@ -298,6 +301,40 @@ async def optimize_shipping(batch: ShippingPlanBatchInput):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Shipping optimization failed: {str(e)}")
+
+# ==================== CHATBOT ====================
+
+chatbot_service = ChatbotService()
+
+@app.post(
+    "/chat",
+    response_model=ChatResponse,
+    tags=["Chatbot"]
+)
+def chat_endpoint(req: ChatRequest):
+    """
+    Endpoint utama chatbot OptiMine
+    """
+    try:
+        result = chatbot_service.handle_chat(
+            session_id=req.session_id,
+            message=req.message,
+            context_type=req.context_type,
+            context_payload=req.context_payload,
+            role=req.role
+        )
+
+        return ChatResponse(
+            answer=result["answer"],
+            sources=result.get("sources"),
+            timestamp=result["timestamp"]
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 # ==================== ERROR HANDLERS ====================
 
