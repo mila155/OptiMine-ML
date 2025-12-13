@@ -10,6 +10,7 @@ from typing import List, Optional, Dict, Any
 from app.rag import rag_engine
 from app.services import llm
 from app.services import rag_services
+from app.services import jetty_locations
 from app.services.prediction import PredictionService
 from app.services.llm_service import LLMService
 llm_service = LLMService()
@@ -349,14 +350,14 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         rom_id = result_df.iloc[0]["rom_id"]
 
         selected_jetty_id = result_df.iloc[0]["jetty_id"]
-        if selected_jetty_id not in JETTY_LOCATIONS:
+        if selected_jetty_id not in jetty_locations:
             raise HTTPException(
                 status_code=400,
                 detail=f"Jetty '{selected_jetty_id}' not found in jetty_locations.py"
             )
 
         # ================= USER SELECTED JETTY =================
-        sel_coord = JETTY_LOCATIONS[selected_jetty_id]
+        sel_coord = jetty_locations[selected_jetty_id]
         jetty_lat = sel_coord["lat"]
         jetty_lon = sel_coord["lon"]
         
@@ -366,7 +367,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         )
         
         nearest_id, nearest_dist, nearest_dur = None, float("inf"), None        
-        for jid, coord in JETTY_LOCATIONS.items():
+        for jid, coord in jetty_locations.items():
             d, dur = route_service.compute_route(
                 rom_lat, rom_lon,
                 coord["lat"], coord["lon"]
