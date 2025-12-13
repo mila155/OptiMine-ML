@@ -9,16 +9,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from datetime import datetime
 from typing import List
+import app
+from app.rag import rag_engine
 from app.services import llm
+from app.services import rag_services
 from app.services.prediction import PredictionService
-import os
 from app.services.llm_service import LLMService
 llm_service = LLMService()
-from app.rag.retriever import RAGRetriever
-rag = RAGRetriever()
-
 from app.rag.rag_engine import RAGEngineSafe
-from app.services.rag_services import RAGService, RAGServicee
+from app.services.rag_services import RAGService
+
 
 from app.schemas import (
     PredictionRequest, RAGQuery,
@@ -34,104 +34,94 @@ from app.services.optimization import (
 
 # ==================== SAFE RAG ENGINE ====================
 
-class SafeRAGEngine:
-    def __init__(self, docs_path="app/rag/documents"):
-        try:
-            self.engine = RAGEngineSafe(docs_path)
-            self.ready = True
-            print("✅ RAG Engine initialized successfully.")
-        except Exception as e:
-            print("⚠️ Failed to initialize RAG Engine:", e)
-            self.engine = None
-            self.ready = False
+# # class SafeRAGEngine:
+#     def __init__(self, docs_path="app/rag/documents"):
+#         try:
+#             self.engine = RAGEngineSafe(docs_path)
+#             self.ready = True
+#             print("✅ RAG Engine initialized successfully.")
+#         except Exception as e:
+#             print("⚠️ Failed to initialize RAG Engine:", e)
+#             self.engine = None
+#             self.ready = False
 
-    def get_context(self, query: str, k: int = 5):
-        if self.engine and self.ready:
-            return self.engine.get_context(query, k=k)
-        else:
-            return "No document context available."
+#     def get_context(self, query: str, k: int = 5):
+#         if self.engine and self.ready:
+#             return self.engine.get_context(query, k=k)
+#         else:
+#             return "No document context available."
 
-DOCS_PATH = "app/rag/documents"
-rag_engine = RAGEngineSafe(DOCS_PATH)
+# DOCS_PATH = "app/rag/documents"
 
-# ==================== FASTAPI SETUP ====================
+# # untuk optimization (string context, robust)
+# rag_engine = RAGEngineSafe(DOCS_PATH)
 
-app = FastAPI(
-    title="OptiMine API",
-    description="AI-powered Mining & Shipping Operations Optimization",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
+# # untuk chatbot & summary (doc-level, explainable)
+# rag_service = RAGService(DOCS_PATH)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# # ==================== FASTAPI SETUP ====================
 
-models_dir = os.getenv("MODELS_DIR", "models")
-prediction_service = PredictionService(models_dir=models_dir)
+# app = FastAPI(
+#     title="OptiMine API",
+#     description="AI-powered Mining & Shipping Operations Optimization",
+#     version="1.0.0",
+#     docs_url="/docs",
+#     redoc_url="/redoc"
+# )
 
-# ==================== ROUTES ==========================
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["*"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
-@app.get("/")
-async def home():
-    return {"message": "API is running successfully!"}
+# models_dir = os.getenv("MODELS_DIR", "models")
+# prediction_service = PredictionService(models_dir=models_dir)
 
-@app.get("/health", response_model=HealthCheck, tags=["Health"])
-async def health_check():
-    models_status = prediction_service.is_healthy()
-    return HealthCheck(
-        status="healthy" if all(models_status.values()) and rag_engine.ready else "degraded",
-        timestamp=datetime.now(),
-        models_loaded=models_status,
-        rag_status="healthy" if rag_engine.ready else "degraded",
-        api_version="1.0.0"
-    )
+# # ==================== ROUTES ==========================
+
+# @app.get("/")
+# async def home():
+#     return {"message": "API is running successfully!"}
+
+# @app.get("/health", response_model=HealthCheck, tags=["Health"])
+# async def health_check():
+#     models_status = prediction_service.is_healthy()
+#     return HealthCheck(
+#         status="healthy" if all(models_status.values()) and rag_engine.ready else "degraded",
+#         timestamp=datetime.now(),
+#         models_loaded=models_status,
+#         rag_status="healthy" if rag_engine.ready else "degraded",
+#         api_version="1.0.0"
+#     )
 
 # ==================== CHATBOT ====================
-rag_retriever = RAGRetriever()
-rag_service = RAGService(rag_retriever)
 
 @app.post("/chat", tags=["Chatbot"])
 async def chat_with_rag(query: str):
-    """
-    Chatbot RAG untuk seluruh domain OptiMine:
-    - mining
-    - shipping
-    - hauling
-    - weather
-    - ML explanation
-    """
     try:
-        context = rag.retrieve(query, top_k=5)
+        docs = rag_services.retrieve_context(query, top_k=5)
 
-        prompt = f"""
-        Anda adalah AI assistant untuk sistem OptiMine.
-        Jawab pertanyaan user menggunakan konteks berikut:
-
-        ==== KNOWLEDGE BASE ====
-        {context}
-
-        ==== USER QUESTION ====
-        {query}
-
-        Jawab dengan jelas, ringkas, dan berbasis data.
-        """
+        prompt = rag_services.build_prompt(
+            user_query=query,
+            docs=docs
+        )
 
         answer = llm.ask(prompt)
 
         return {
             "query": query,
             "answer": answer,
-            "context_used": context,
+            "sources": [
+                {"id": d["id"], "score": d["score"]}
+                for d in docs
+            ]
         }
 
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
         
 # ==================== MINING ENDPOINTS ====================
 
@@ -139,7 +129,7 @@ async def chat_with_rag(query: str):
 async def predict_mining_single(plan: MiningPlanInput):
     try:
         data = [plan.model_dump()]
-        result_df = prediction_service.predict_mining(data)
+        result_df = PredictionService.predict_mining(data)
         response = [
             MiningPredictionOutput(**{
                 **row.to_dict(),
@@ -161,7 +151,7 @@ async def predict_mining_single(plan: MiningPlanInput):
 async def predict_mining_batch(batch: MiningPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = prediction_service.predict_mining(data)
+        result_df = PredictionService.predict_mining(data)
         response = [
             MiningPredictionOutput(**{
                 **row.to_dict(),
@@ -183,7 +173,7 @@ async def predict_mining_batch(batch: MiningPlanBatchInput):
 async def get_mining_summary(batch: MiningPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = prediction_service.predict_mining(data)
+        result_df = PredictionService.predict_mining(data)
         
         total_planned = result_df['planned_production_ton'].sum()
         total_predicted = result_df['predicted_production_ton'].sum()
@@ -218,7 +208,7 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
 async def predict_shipping_single(plan: ShippingPlanInput):
     try:
         data = [plan.model_dump()]
-        result_df = prediction_service.predict_shipping(data)
+        result_df = PredictionService.predict_shipping(data)
         response = [
             ShippingPredictionOutput(**{
                 **row.to_dict(),
@@ -237,7 +227,7 @@ async def predict_shipping_single(plan: ShippingPlanInput):
 async def predict_shipping_batch(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = prediction_service.predict_shipping(data)
+        result_df = PredictionService.predict_shipping(data)
         response = [
             ShippingPredictionOutput(**{
                 **row.to_dict(),
@@ -256,7 +246,7 @@ async def predict_shipping_batch(batch: ShippingPlanBatchInput):
 async def get_shipping_summary(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = prediction_service.predict_shipping(data)
+        result_df = PredictionService.predict_shipping(data)
 
         summary = {
             "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
@@ -287,7 +277,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 async def optimize_mining(batch: MiningPlanBatchInput):
     try:
         data = [p.model_dump() for p in batch.plans]
-        pred_df = prediction_service.predict_mining(data)
+        pred_df = PredictionService.predict_mining(data)
         result = generate_top3_mining_plans(pred_df, config={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
@@ -302,7 +292,7 @@ async def optimize_mining(batch: MiningPlanBatchInput):
 async def optimize_shipping(batch: ShippingPlanBatchInput):
     try:
         data = [p.model_dump() for p in batch.plans]
-        pred_df = prediction_service.predict_shipping(data)
+        pred_df = PredictionService.predict_shipping(data)
         result = generate_top3_shipping_plans(pred_df, config={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,

@@ -1,6 +1,8 @@
 from typing import List, Dict, Any
-from app.rag.retriever import RAGRetriever  
 import textwrap
+
+from app.rag.vectorstore import VectorStore
+from app.rag.retriever import RAGRetriever  
 
 SYSTEM_PROMPT = textwrap.dedent("""\
 You are OptiMine AI Assistant — an expert in mining production, hauling logistics,
@@ -15,20 +17,24 @@ Rules:
 """)
 
 class RAGService:
-    def __init__(self, retriever: RAGRetriever = None):
-        self.retriever = retriever or RAGRetriever()
+    def __init__(self, docs_path: str = "app/rag/documents"):
+        # ✅ build vectorstore di sini
+        self.vs = VectorStore(docs_path)
+        self.vs.build()
+
+        # ✅ retriever selalu dapat vectorstore
+        self.retriever = RAGRetriever(self.vs)
 
     def retrieve_context(self, query: str, top_k: int = 4) -> List[Dict[str, Any]]:
-        """
-        Return list of docs: each is {id, score, text, metadata}
-        """
-        docs = self.retriever.retrieve(query, top_k=top_k)  
+        docs = self.retriever.retrieve(query, top_k=top_k)
+
         results = []
         for d in docs:
             text = getattr(d, "page_content", None) or getattr(d, "text", None) or str(d)
             meta = getattr(d, "metadata", {}) if hasattr(d, "metadata") else {}
             doc_id = meta.get("id") or getattr(d, "id", None) or meta.get("source", None)
             score = float(getattr(d, "score", 0.0) or 0.0)
+
             results.append({
                 "id": doc_id,
                 "score": score,
@@ -37,27 +43,32 @@ class RAGService:
             })
         return results
 
-    def build_prompt(self, user_query: str, docs: List[Dict[str, Any]], history: List[Dict[str,str]] = None) -> str:
+    def build_prompt(
+        self,
+        user_query: str,
+        docs: List[Dict[str, Any]],
+        history: List[Dict[str, str]] = None
+    ) -> str:
         ctx_parts = []
         for i, d in enumerate(docs):
-            snippet = d["text"]
-            if len(snippet) > 1500:
-                snippet = snippet[:1500] + "..."  
-            header = f"[SOURCE {i+1}] id={d.get('id')} score={d.get('score'):.3f} metadata={d.get('metadata')}"
+            snippet = d["text"][:1500] + ("..." if len(d["text"]) > 1500 else "")
+            header = (
+                f"[SOURCE {i+1}] id={d.get('id')} "
+                f"score={d.get('score'):.3f} metadata={d.get('metadata')}"
+            )
             ctx_parts.append(header + "\n" + snippet)
 
         context_block = "\n\n".join(ctx_parts) if ctx_parts else "No relevant documents found."
 
         history_block = ""
         if history:
-            hist_lines = []
-            for h in history[-6:]:  
-                role = h.get("role", "User")
-                msg = h.get("message", "")
-                hist_lines.append(f"{role.upper()}: {msg}")
+            hist_lines = [
+                f"{h.get('role', 'User').upper()}: {h.get('message', '')}"
+                for h in history[-6:]
+            ]
             history_block = "\n\nConversation history:\n" + "\n".join(hist_lines)
 
-        prompt = f"""{SYSTEM_PROMPT}
+        return f"""{SYSTEM_PROMPT}
 
 CONTEXT:
 {context_block}
@@ -74,4 +85,3 @@ INSTRUCTIONS:
 - If you cite a fact from a document, include the source id in square brackets, e.g. [SOURCE 1].
 - Output plain text (no JSON).
 """
-        return prompt
