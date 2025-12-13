@@ -1,30 +1,17 @@
 import requests
+from functools import lru_cache
 
 class RouteService:
+    def __init__(self):
+        self.base_url = "http://router.project-osrm.org/route/v1/driving"
 
-    @staticmethod
-    def road_distance_osrm(lat1, lon1, lat2, lon2):
+    @lru_cache(maxsize=256)
+    def compute_route(self, lat1, lon1, lat2, lon2):
+        url = f"{self.base_url}/{lon1},{lat1};{lon2},{lat2}?overview=false"
         try:
-            url = (
-                f"http://router.project-osrm.org/route/v1/driving/"
-                f"{lon1},{lat1};{lon2},{lat2}?overview=false"
-            )
-
-            r = requests.get(url, timeout=10).json()
-
-            route = r["routes"][0]
-            return route["distance"] / 1000, route["duration"] / 60
-
+            r = requests.get(url, timeout=8)
+            data = r.json()
+            route = data["routes"][0]
+            return round(route["distance"] / 1000, 2), round(route["duration"] / 60, 2)
         except Exception:
             return None, None
-
-    @staticmethod
-    def compute_route(rom_lat, rom_lon, jetty_lat, jetty_lon):
-        dist_km, dur_min = RouteService.road_distance_osrm(
-            rom_lat, rom_lon, jetty_lat, jetty_lon
-        )
-
-        return {
-            "distance_km": dist_km,
-            "duration_min": dur_min
-        }
