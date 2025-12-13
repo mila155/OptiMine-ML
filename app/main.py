@@ -24,7 +24,7 @@ weather_service = WeatherService()
 from app.services.route_service import RouteService
 route_service = RouteService()
 
-from app.services.jetty_locations import JETTY_COORDINATES
+from app.services.jetty_locations import JETTY_LOCATIONS
 
 from app.schemas import (
     PredictionRequest, RAGQuery,
