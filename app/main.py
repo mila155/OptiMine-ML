@@ -14,7 +14,6 @@ from app.services.prediction import PredictionService
 from app.services.llm_service import LLMService
 llm_service = LLMService()
 from app.rag.vectorstore import VectorStore
-from app.rag.retriever import RAGRetriever
 from app.rag.rag_engine import RAGEngineSafe
 from app.services.rag_services import RAGService
 from pydantic import BaseModel
@@ -23,15 +22,6 @@ weather_service = WeatherService()
 from app.services.route_service import RouteService
 route_service = RouteService()
 from app.services.jetty_locations import JETTY_COORDINATES
-
-vs = VectorStore("app/rag/documents")
-try:
-    vs.build()
-except Exception as e:
-    print("Warning: RAG build failed:", e)
-    
-rag = RAGRetriever(vector_store=vs)
-
 
 from app.schemas import (
     PredictionRequest, RAGQuery,
