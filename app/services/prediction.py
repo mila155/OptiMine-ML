@@ -138,6 +138,19 @@ class PredictionService:
         
         if 'eta_date' in df.columns:
             df['eta_date'] = pd.to_datetime(df['eta_date'])
+
+        weather_defaults = {
+            "precipitation_mm": 0.0,
+            "wind_speed_kmh": 10.0,
+            "temp_day": 25.0,
+            "cloud_cover_pct": 30.0
+        }
+
+        for col, default in weather_defaults.items():
+            if col not in df.columns:
+                df[col] = default
+
+        df = self.preprocess_shipping_data(df.to_dict("records"))
         
         shipping_features = [
             "planned_volume_ton",
