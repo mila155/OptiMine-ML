@@ -4,7 +4,8 @@ from datetime import datetime
 from app.services.chat_memory import get_history, append_message
 from app.services.chat_context_builder import build_context
 from app.services.llm_service import LLMService
-from app.rag.rag_engine import RAGEngine
+from app.rag.rag_engine import RAGEngineSafe
+
 
 
 class ChatbotService:
@@ -17,7 +18,7 @@ class ChatbotService:
 
     def __init__(self):
         self.llm = LLMService()
-        self.rag = RAGEngine()
+        self.rag = RAGEngineSafe()
 
     def handle_chat(
         self,
