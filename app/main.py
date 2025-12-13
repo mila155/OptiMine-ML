@@ -8,6 +8,8 @@ from fastapi import APIRouter, APIRouter, FastAPI, HTTPException, status, Upload
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.services.chatbot_service import ChatbotService
+from app.services.chatbot_service import ChatbotService
 from app.services.prediction import PredictionService
 from app.services.llm_service import LLMService
 llm_service = LLMService()
@@ -26,7 +28,7 @@ from app.services.jetty_locations import JETTY_LOCATIONS
 import logging
 
 from app.schemas import (
-    PredictionRequest, RAGQuery,
+    ChatRequest, ChatResponse, PredictionRequest, RAGQuery,
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
     ShippingPlanInput, ShippingPlanBatchInput, ShippingPredictionOutput, ShippingSummaryOutput,
     HealthCheck
@@ -396,7 +398,7 @@ async def optimize_shipping(batch: ShippingPlanBatchInput):
         raise HTTPException(status_code=500, detail=f"Shipping optimization failed: {str(e)}")
 
 # ==================== CHATBOT ====================
-
+ChatbotService
 chatbot_service = ChatbotService()
 
 @app.post(
