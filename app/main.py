@@ -345,11 +345,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                     status_code=400,
                     detail=f"Missing required column '{col}'"
                 )
-
-        for col in ["precipitation_mm", "wind_speed_kmh", "temp_day", "cloud_cover_pct"]:
-            if col not in df.columns:
-                df[col] = 0.0
-
+        
         rom_lat = float(df.iloc[0]["rom_lat"])
         rom_lon = float(df.iloc[0]["rom_lon"])
         rom_id = df.iloc[0]["rom_id"]
@@ -373,8 +369,10 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             if d is not None and d < nearest_dist:
                 nearest_id, nearest_dist, nearest_dur = jid, d, dur
 
-        df["rain_mm"] = 0.0
-        df["wind_kmh"] = 0.0
+        df["precipitation_mm"] = 0.0  
+        df["wind_speed_kmh"] = 0.0    
+        df["temp_day"] = 25.0         
+        df["cloud_cover_pct"] = 50.0  
 
         for d in df["eta_date"].dt.date.unique():
             w = WeatherService.fetch_weather(
@@ -383,9 +381,11 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                 target_date=d
             )
             mask = df["eta_date"].dt.date == d
-            df.loc[mask, "rain_mm"] = w["precipitation_mm"]
-            df.loc[mask, "wind_kmh"] = w["wind_speed_kmh"]
-
+            df.loc[mask, "precipitation_mm"] = w["precipitation_mm"]
+            df.loc[mask, "wind_speed_kmh"] = w["wind_speed_kmh"]
+            df.loc[mask, "temp_day"] = w.get("temp_day", 25.0)
+            df.loc[mask, "cloud_cover_pct"] = w.get("cloud_cover_pct", 50.0)
+            
         # ===================== HAULING SUMMARY =====================
         hauling_summary = {
             "rom_id": rom_id,
