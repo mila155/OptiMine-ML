@@ -436,16 +436,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 
         ai_summary = llm_service.summarize_shipping(summary)
 
-        return {
-            "summary": summary,
-            "route_recommendations": route_recommendations,
-            "ai_summary": ai_summary,
-            "ai_notes": {
-                "risk_level_days": summary["high_risk_days"],
-                "max_wind": summary["max_wind"],
-                "avg_rain": summary["avg_rain"]
-            }
-        }
+        return ShippingSummaryOutput(**summary)
 
     except Exception as e:
         raise HTTPException(
