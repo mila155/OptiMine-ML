@@ -75,27 +75,15 @@ class ShippingPlanInput(BaseModel):
     eta_date: date
     planned_volume_ton: float
     loading_rate_tph: float
-    precipitation_mm: Optional[float] = 0
-    wind_speed_kmh: Optional[float] = 0
-    cloud_cover_pct: Optional[float] = 0
-    temp_day: Optional[float] = 25
+    status: Optional[str] = None
+    priority_flag: Optional[str] = None
+    rom_id: str
+    rom_lat: float
+    rom_lon: float
+    jetty_id: str
+    jetty_lat: Optional[float] = None
+    jetty_lon: Optional[float] = None
     
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "shipment_id": "SH7001",
-                "vessel_name": "MV-OCEAN",
-                "assigned_jetty": "JTY-01",
-                "eta_date": "2025-12-10",
-                "planned_volume_ton": 45000,
-                "loading_rate_tph": 1200,
-                "precipitation_mm": 3.5,
-                "wind_speed_kmh": 22.5,
-                "cloud_cover_pct": 45,
-                "temp_day": 27
-            }
-        }
-
 class ShippingPlanBatchInput(BaseModel):
     plans: List[ShippingPlanInput]
 
