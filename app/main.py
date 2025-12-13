@@ -22,6 +22,7 @@ from app.services.weather import WeatherService
 weather_service = WeatherService()
 from app.services.route_service import RouteService
 route_service = RouteService()
+from app.services.jetty_locations import JETTY_COORDINATES
 
 vs = VectorStore("app/rag/documents")
 try:
@@ -343,51 +344,43 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 
         result_df = prediction_service.predict_shipping(data)
 
-        required_cols = ["rom_lat", "rom_lon", "jetty_lat", "jetty_lon"]
+        required_cols = ["rom_id", "rom_lat", "rom_lon", "jetty_id", "eta_date"]
         for col in required_cols:
-            if col not in result_df.columns:
+            if col not in df.columns:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Column '{col}' is missing in JSON input. "
-                           f"Backend web must send lat/lon for ROM and Jetty."
+                    detail=f"Missing required column '{col}' from backend web JSON"
                 )
-            result_df[col] = pd.to_numeric(result_df[col], errors="coerce")
 
-        route_recommendations = {}
+        rom_lat = float(df.iloc[0]["rom_lat"])
+        rom_lon = float(df.iloc[0]["rom_lon"])
+        rom_id = df.iloc[0]["rom_id"]
 
-        for _, row in result_df.iterrows():
-            r = route_service.compute_route(
-                row["rom_lat"], row["rom_lon"],
-                row["jetty_lat"], row["jetty_lon"]
+        selected_jetty_id = df.iloc[0]["jetty_id"]
+        if selected_jetty_id not in JETTY_LOCATIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Jetty '{selected_jetty_id}' not found in jetty_locations.py"
             )
 
-            route_recommendations[row["shipment_id"]] = {
-                "rom_id": row["rom_id"],
-                "jetty_id": row["jetty_id"],
-                "rom_coordinates": {
-                    "lat": row["rom_lat"],
-                    "lon": row["rom_lon"]
-                },
-                "jetty_coordinates": {
-                    "lat": row["jetty_lat"],
-                    "lon": row["jetty_lon"]
-                },
-                "distance_km": r["distance_km"],
-                "duration_min": r["duration_min"]
-            }
-
-        summary = {
-            "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
-            "total_days": len(result_df["eta_date"].unique()),
-            "total_volume_ton": float(result_df["planned_volume_ton"].sum()),
-            "total_vessels": len(result_df),
-            "total_demurrage_cost": float(result_df["predicted_demurrage_cost"].sum()),
-            "avg_loading_efficiency": float(result_df["loading_efficiency"].mean()),
-            "high_risk_days": int((result_df["risk_level"] == "HIGH").sum()),
-        }
+        # ================= USER SELECTED JETTY =================
+        sel_coord = JETTY_LOCATIONS[selected_jetty_id]
+        sel_dist, sel_dur = route_service.compute_route(
+            rom_lat, rom_lon,
+            sel_coord["lat"], sel_coord["lon"]
+        )
+        
+        nearest_id, nearest_dist, nearest_dur = None, float("inf"), None
+        for jid, coord in JETTY_LOCATIONS.items():
+            d, dur = route_service.compute_route(
+                rom_lat, rom_lon,
+                coord["lat"], coord["lon"]
+            )
+            if d is not None and d < nearest_dist:
+                nearest_id, nearest_dist, nearest_dur = jid, d, dur
 
         daily_summary = (
-            result_df.groupby("eta_date")
+            df.groupby("eta_date")
             .agg({
                 "planned_volume_ton": "sum",
                 "predicted_loading_hours": "mean",
@@ -395,17 +388,52 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                 "risk_level": lambda x: x.mode()[0] if len(x.mode()) else "UNKNOWN"
             })
             .reset_index()
-        ).to_dict("records")
+            .to_dict("records")
+        )
 
-        summary["daily_summary"] = daily_summary
-        summary["ai_summary"] = llm_service.summarize_shipping(summary)
-        summary["route_recommendations"] = route_recommendations
+        summary = {
+            "role": "Shipping Planner",
+            "focus": "ROM-to-Jetty Hauling & Vessel Loading",
+            "period": f"{df['eta_date'].min()} to {df['eta_date'].max()}",
+            "total_days": int(df["eta_date"].nunique()),
+            "total_volume_ton": float(df["planned_volume_ton"].sum()),
+            "total_vessels": int(len(df)),
+            "total_demurrage_cost": float(df["predicted_demurrage_cost"].sum()),
+            "avg_loading_efficiency": float(df["loading_efficiency"].mean()),
+            "high_risk_days": int((df["risk_level"] == "HIGH").sum()),
+            "daily_summary": daily_summary
+        }
 
-        return ShippingSummaryOutput(**summary)
+        route_recommendations = {
+            "rom_id": rom_id,
+            "user_selected_jetty": {
+                "jetty_id": selected_jetty_id,
+                "distance_km": sel_dist,
+                "duration_min": sel_dur
+            },
+            "recommended_nearest_jetty": {
+                "jetty_id": nearest_id,
+                "distance_km": nearest_dist,
+                "duration_min": nearest_dur
+            }
+        }
+
+        ai_summary = llm_service.summarize_shipping(context)
+
+        return {
+            "summary_text": ai_summary,
+            "context": context,
+            "route_recommendations": route_recommendations,
+            "ai_notes": {
+                "risk_level_days": context["high_risk_days"],
+                "max_wind": float(df["wind_speed_kmh"].max()),
+                "avg_rain": float(df["precipitation_mm"].mean())
+            }
+        }
 
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail=f"Shipping summary generation failed: {str(e)}"
         )
 
