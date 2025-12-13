@@ -17,6 +17,9 @@ llm_service = LLMService()
 from app.rag.retriever import RAGRetriever
 rag = RAGRetriever()
 
+from app.rag.rag_engine import RAGEngineSafe
+from app.services.rag_services import RAGService, RAGServicee
+
 from app.schemas import (
     PredictionRequest, RAGQuery,
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
@@ -28,8 +31,6 @@ from app.services.optimization import (
     generate_top3_mining_plans,
     generate_top3_shipping_plans
 )
-
-from app.rag.rag_engine import RAGEngineSafe
 
 # ==================== SAFE RAG ENGINE ====================
 
@@ -51,7 +52,7 @@ class SafeRAGEngine:
             return "No document context available."
 
 DOCS_PATH = "app/rag/documents"
-rag_engine = SafeRAGEngine(DOCS_PATH)
+rag_engine = RAGEngineSafe(DOCS_PATH)
 
 # ==================== FASTAPI SETUP ====================
 
@@ -92,6 +93,8 @@ async def health_check():
     )
 
 # ==================== CHATBOT ====================
+rag_retriever = RAGRetriever()
+rag_service = RAGService(rag_retriever)
 
 @app.post("/chat", tags=["Chatbot"])
 async def chat_with_rag(query: str):
