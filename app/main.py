@@ -333,7 +333,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         data = [plan.model_dump() for plan in batch.plans]
 
         result_df = prediction_service.predict_shipping(data)
-
+        
         required_cols = ["rom_id", "rom_lat", "rom_lon", "jetty_id", "eta_date"]
         for col in required_cols:
             if col not in result_df.columns:
@@ -342,6 +342,8 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                     detail=f"Missing required column '{col}' from backend web JSON"
                 )
 
+        result_df["eta_date"] = pd.to_datetime(result_df["eta_date"])
+        
         rom_lat = float(result_df.iloc[0]["rom_lat"])
         rom_lon = float(result_df.iloc[0]["rom_lon"])
         rom_id = result_df.iloc[0]["rom_id"]
@@ -355,12 +357,15 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 
         # ================= USER SELECTED JETTY =================
         sel_coord = JETTY_LOCATIONS[selected_jetty_id]
+        jetty_lat = sel_coord["lat"]
+        jetty_lon = sel_coord["lon"]
+        
         sel_dist, sel_dur = route_service.compute_route(
             rom_lat, rom_lon,
-            sel_coord["lat"], sel_coord["lon"]
+            jetty_lat, jetty_lon
         )
         
-        nearest_id, nearest_dist, nearest_dur = None, float("inf"), None
+        nearest_id, nearest_dist, nearest_dur = None, float("inf"), None        
         for jid, coord in JETTY_LOCATIONS.items():
             d, dur = route_service.compute_route(
                 rom_lat, rom_lon,
@@ -369,15 +374,34 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             if d is not None and d < nearest_dist:
                 nearest_id, nearest_dist, nearest_dur = jid, d, dur
 
+        result_df["rain_mm"] = 0.0
+        result_df["wind_kmh"] = 0.0
+
+        for d in result_df["eta_date"].dt.date.unique():
+            w = WeatherService.fetch_weather(
+                lat=jetty_lat,
+                lon=jetty_lon,
+                target_date=d
+            )
+
+            mask = result_df["eta_date"].dt.date == d
+            result_df.loc[mask, "rain_mm"] = w["precipitation_mm"]
+            result_df.loc[mask, "wind_kmh"] = w["wind_speed_kmh"]
+
         daily_summary = (
-            result_df.groupby("eta_date")
+            result_df
+            .groupby(result_df["eta_date"].dt.date)
             .agg({
                 "planned_volume_ton": "sum",
                 "predicted_loading_hours": "mean",
                 "loading_efficiency": "mean",
-                "risk_level": lambda x: x.mode()[0] if len(x.mode()) else "UNKNOWN"
+                "predicted_demurrage_cost": "sum",
+                "rain_mm": "mean",
+                "wind_kmh": "max",
+                "risk level": lambda x: x.mode() [0] if len(x.mode()) else "UNKNOWN"
             })
             .reset_index()
+            .rename(columns={"eta_date": "date"})
             .to_dict("records")
         )
 
@@ -391,9 +415,11 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             "total_demurrage_cost": float(result_df["predicted_demurrage_cost"].sum()),
             "avg_loading_efficiency": float(result_df["loading_efficiency"].mean()),
             "high_risk_days": int((result_df["risk_level"] == "HIGH").sum()),
+            "avg_rain": float(result_df["rain_mm"].mean()),
+            "max_wind": float(result_df["wind_kmh"].max()),
             "daily_summary": daily_summary
         }
-
+        
         route_recommendations = {
             "rom_id": rom_id,
             "user_selected_jetty": {
@@ -411,13 +437,13 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         ai_summary = llm_service.summarize_shipping(summary)
 
         return {
-            "summary_text": ai_summary,
-            "context": context,
+            "summary": summary,
             "route_recommendations": route_recommendations,
+            "ai_summary": ai_summary,
             "ai_notes": {
-                "risk_level_days": context["high_risk_days"],
-                "max_wind": float(result_df["wind_speed_kmh"].max()),
-                "avg_rain": float(result_df["precipitation_mm"].mean())
+                "risk_level_days": summary["high_risk_days"],
+                "max_wind": summary["max_wind"],
+                "avg_rain": summary["avg_rain"]
             }
         }
 
