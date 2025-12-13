@@ -336,17 +336,17 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 
         required_cols = ["rom_id", "rom_lat", "rom_lon", "jetty_id", "eta_date"]
         for col in required_cols:
-            if col not in df.columns:
+            if col not in result_df.columns:
                 raise HTTPException(
                     status_code=400,
                     detail=f"Missing required column '{col}' from backend web JSON"
                 )
 
-        rom_lat = float(df.iloc[0]["rom_lat"])
-        rom_lon = float(df.iloc[0]["rom_lon"])
-        rom_id = df.iloc[0]["rom_id"]
+        rom_lat = float(result_df.iloc[0]["rom_lat"])
+        rom_lon = float(result_df.iloc[0]["rom_lon"])
+        rom_id = result_df.iloc[0]["rom_id"]
 
-        selected_jetty_id = df.iloc[0]["jetty_id"]
+        selected_jetty_id = result_df.iloc[0]["jetty_id"]
         if selected_jetty_id not in JETTY_LOCATIONS:
             raise HTTPException(
                 status_code=400,
@@ -370,7 +370,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                 nearest_id, nearest_dist, nearest_dur = jid, d, dur
 
         daily_summary = (
-            df.groupby("eta_date")
+            result_df.groupby("eta_date")
             .agg({
                 "planned_volume_ton": "sum",
                 "predicted_loading_hours": "mean",
@@ -384,13 +384,13 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         summary = {
             "role": "Shipping Planner",
             "focus": "ROM-to-Jetty Hauling & Vessel Loading",
-            "period": f"{df['eta_date'].min()} to {df['eta_date'].max()}",
-            "total_days": int(df["eta_date"].nunique()),
-            "total_volume_ton": float(df["planned_volume_ton"].sum()),
-            "total_vessels": int(len(df)),
-            "total_demurrage_cost": float(df["predicted_demurrage_cost"].sum()),
-            "avg_loading_efficiency": float(df["loading_efficiency"].mean()),
-            "high_risk_days": int((df["risk_level"] == "HIGH").sum()),
+            "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
+            "total_days": int(result_df["eta_date"].nunique()),
+            "total_volume_ton": float(result_df["planned_volume_ton"].sum()),
+            "total_vessels": int(len(result_df)),
+            "total_demurrage_cost": float(result_df["predicted_demurrage_cost"].sum()),
+            "avg_loading_efficiency": float(result_df["loading_efficiency"].mean()),
+            "high_risk_days": int((result_df["risk_level"] == "HIGH").sum()),
             "daily_summary": daily_summary
         }
 
@@ -408,7 +408,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             }
         }
 
-        ai_summary = llm_service.summarize_shipping(context)
+        ai_summary = llm_service.summarize_shipping(summary)
 
         return {
             "summary_text": ai_summary,
@@ -416,8 +416,8 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             "route_recommendations": route_recommendations,
             "ai_notes": {
                 "risk_level_days": context["high_risk_days"],
-                "max_wind": float(df["wind_speed_kmh"].max()),
-                "avg_rain": float(df["precipitation_mm"].mean())
+                "max_wind": float(result_df["wind_speed_kmh"].max()),
+                "avg_rain": float(result_df["precipitation_mm"].mean())
             }
         }
 
