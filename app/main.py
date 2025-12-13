@@ -378,29 +378,14 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         df["temp_day"] = 25.0         
         df["cloud_cover_pct"] = 50.0  
 
+        weather_rows = []
         for d in df["eta_date"].dt.date.unique():
-            try:
-                logger.info(f"Fetching weather for date: {d}")
-                w = WeatherService.fetch_weather(
-                    lat=sel_coord["lat"],
-                    lon=sel_coord["lon"],
-                    target_date=d
-                )
-                mask = df["eta_date"].dt.date == d
-                df.loc[mask, "precipitation_mm"] = w["precipitation_mm"]
-                df.loc[mask, "wind_speed_kmh"] = w["wind_speed_kmh"]
-                df.loc[mask, "temp_day"] = w.get("temp_day", 25.0)
-                df.loc[mask, "cloud_cover_pct"] = w.get("cloud_cover_pct", 50.0)
-                
-                logger.info(f"✅ Weather fetched for {d}")
-                
-            except Exception as we:
-                logger.warning(f"Weather fetch failed for {d}: {we}, using defaults")
-                mask = df["eta_date"].dt.date == d
-                df.loc[mask, "precipitation_mm"] = 0.0
-                df.loc[mask, "wind_speed_kmh"] = 10.0
-                df.loc[mask, "temp_day"] = 25.0
-                df.loc[mask, "cloud_cover_pct"] = 50.0
+            w = WeatherService.fetch_weather(
+                lat=sel_coord["lat"],
+                lon=sel_coord["lon"],
+                target_date=d
+            )
+            weather_rows.append(w)
                 
         # ===================== HAULING SUMMARY =====================
         hauling_summary = {
