@@ -352,8 +352,8 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         rom_lat = float(df.iloc[0]["rom_lat"])
         rom_lon = float(df.iloc[0]["rom_lon"])
         rom_id = df.iloc[0]["rom_id"]
-
         selected_jetty = df.iloc[0]["jetty_id"]
+        
         if selected_jetty not in JETTY_LOCATIONS:
             raise HTTPException(400, f"Jetty '{selected_jetty}' not found")
 
@@ -372,22 +372,17 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             if d is not None and d < nearest_dist:
                 nearest_id, nearest_dist, nearest_dur = jid, d, dur
 
-        df["precipitation_mm"] = 0.0  
-        df["wind_speed_kmh"] = 0.0    
-        df["temp_day"] = 25.0         
-        df["cloud_cover_pct"] = 50.0  
-
+        weather_rows = []
         for d in df["eta_date"].dt.date.unique():
             w = WeatherService.fetch_weather(
                 lat=sel_coord["lat"],
                 lon=sel_coord["lon"],
                 target_date=d
             )
-            mask = df["eta_date"].dt.date == d
-            df.loc[mask, "precipitation_mm"] = w["precipitation_mm"]
-            df.loc[mask, "wind_speed_kmh"] = w["wind_speed_kmh"]
-            df.loc[mask, "temp_day"] = w.get("temp_day", 25.0)
-            df.loc[mask, "cloud_cover_pct"] = w.get("cloud_cover_pct", 50.0)
+            weather_rows.append(w)
+
+        avg_rain = float(pd.DataFrame(weather_rows)["precipitation_mm"].mean())
+        max_wind = float(pd.DataFrame(weather_rows)["wind_speed_kmh"].max())
             
         # ===================== HAULING SUMMARY =====================
         hauling_summary = {
@@ -400,10 +395,8 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                 "distance_km": nearest_dist,
                 "duration_min": nearest_dur
             },
-            "avg_precipitation_mm": float(df["precipitation_mm"].mean()),  
-            "max_wind_speed_kmh": float(df["wind_speed_kmh"].max()),       
-            "avg_temp_day": float(df["temp_day"].mean()),
-            "avg_cloud_cover_pct": float(df["cloud_cover_pct"].mean())
+            "avg_rain_mm": avg_rain,
+            "max_wind_kmh": max_wind
         }
 
         # ===================== SHIPPING SUMMARY =====================
