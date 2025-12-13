@@ -346,6 +346,10 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                     detail=f"Missing required column '{col}'"
                 )
 
+        for col in ["precipitation_mm", "wind_speed_kmh", "temp_day", "cloud_cover_pct"]:
+            if col not in df.columns:
+                df[col] = 0.0
+
         rom_lat = float(df.iloc[0]["rom_lat"])
         rom_lon = float(df.iloc[0]["rom_lon"])
         rom_id = df.iloc[0]["rom_id"]
