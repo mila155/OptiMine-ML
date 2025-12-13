@@ -52,6 +52,7 @@ class RAGService:
         if history:
             hist_lines = []
             for h in history[-6:]:  
+                role = h.get("role", "User")
                 msg = h.get("message", "")
                 hist_lines.append(f"{role.upper()}: {msg}")
             history_block = "\n\nConversation history:\n" + "\n".join(hist_lines)
