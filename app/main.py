@@ -397,8 +397,10 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                 "distance_km": nearest_dist,
                 "duration_min": nearest_dur
             },
-            "avg_rain_mm": float(df["rain_mm"].mean()),
-            "max_wind_kmh": float(df["wind_kmh"].max())
+            "avg_precipitation_mm": float(df["precipitation_mm"].mean()),  
+            "max_wind_speed_kmh": float(df["wind_speed_kmh"].max()),       
+            "avg_temp_day": float(df["temp_day"].mean()),
+            "avg_cloud_cover_pct": float(df["cloud_cover_pct"].mean())
         }
 
         # ===================== SHIPPING SUMMARY =====================
