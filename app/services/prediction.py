@@ -141,7 +141,7 @@ class PredictionService:
 
         weather_defaults = {
             "precipitation_mm": 0.0,
-            "wind_speed_kmh": 10.0,
+            "wind_speed_kmh": 0.0,
             "temp_day": 25.0,
             "cloud_cover_pct": 30.0
         }
