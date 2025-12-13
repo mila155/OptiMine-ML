@@ -1,8 +1,10 @@
 import requests
 from datetime import date, datetime
+from functools import lru_cache
 
 class WeatherService:
     @staticmethod
+    @lru_cache(maxsize=256)
     def fetch_weather(lat: float, lon: float, target_date: date) -> dict:
         
         date_str = target_date.strftime("%Y-%m-%d")
@@ -48,4 +50,5 @@ class WeatherService:
                 "wind_speed_kmh": 10,
                 "precipitation_mm": 0,
                 "cloud_cover_pct": 30,
+
             }
