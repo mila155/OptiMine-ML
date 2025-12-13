@@ -331,41 +331,36 @@ async def predict_shipping_batch(batch: ShippingPlanBatchInput):
 async def get_shipping_summary(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
+        df = prediction_service.predict_shipping(data)
 
-        result_df = prediction_service.predict_shipping(data)
-        
-        required_cols = ["rom_id", "rom_lat", "rom_lon", "jetty_id", "eta_date"]
+        df["eta_date"] = pd.to_datetime(df["eta_date"])
+
+        required_cols = [
+            "rom_id", "rom_lat", "rom_lon","jetty_id", "eta_date","planned_volume_ton",
+            "predicted_loading_hours","predicted_demurrage_cost","loading_efficiency","risk_level"
+        ]
         for col in required_cols:
-            if col not in result_df.columns:
+            if col not in df.columns:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Missing required column '{col}' from backend web JSON"
+                    detail=f"Missing required column '{col}'"
                 )
 
-        result_df["eta_date"] = pd.to_datetime(result_df["eta_date"])
-        
-        rom_lat = float(result_df.iloc[0]["rom_lat"])
-        rom_lon = float(result_df.iloc[0]["rom_lon"])
-        rom_id = result_df.iloc[0]["rom_id"]
+        rom_lat = float(df.iloc[0]["rom_lat"])
+        rom_lon = float(df.iloc[0]["rom_lon"])
+        rom_id = df.iloc[0]["rom_id"]
 
-        selected_jetty_id = result_df.iloc[0]["jetty_id"]
-        if selected_jetty_id not in JETTY_LOCATIONS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Jetty '{selected_jetty_id}' not found in jetty_locations.py"
-            )
+        selected_jetty = df.iloc[0]["jetty_id"]
+        if selected_jetty not in JETTY_LOCATIONS:
+            raise HTTPException(400, f"Jetty '{selected_jetty}' not found")
 
-        # ================= USER SELECTED JETTY =================
-        sel_coord = JETTY_LOCATIONS[selected_jetty_id]
-        jetty_lat = sel_coord["lat"]
-        jetty_lon = sel_coord["lon"]
-        
+        sel_coord = JETTY_LOCATIONS[selected_jetty]
         sel_dist, sel_dur = route_service.compute_route(
             rom_lat, rom_lon,
-            jetty_lat, jetty_lon
+            sel_coord["lat"], sel_coord["lon"]
         )
-        
-        nearest_id, nearest_dist, nearest_dur = None, float("inf"), None        
+
+        nearest_id, nearest_dist, nearest_dur = None, float("inf"), None
         for jid, coord in JETTY_LOCATIONS.items():
             d, dur = route_service.compute_route(
                 rom_lat, rom_lon,
@@ -374,69 +369,77 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             if d is not None and d < nearest_dist:
                 nearest_id, nearest_dist, nearest_dur = jid, d, dur
 
-        result_df["rain_mm"] = 0.0
-        result_df["wind_kmh"] = 0.0
+        df["rain_mm"] = 0.0
+        df["wind_kmh"] = 0.0
 
-        for d in result_df["eta_date"].dt.date.unique():
+        for d in df["eta_date"].dt.date.unique():
             w = WeatherService.fetch_weather(
-                lat=jetty_lat,
-                lon=jetty_lon,
+                lat=sel_coord["lat"],
+                lon=sel_coord["lon"],
                 target_date=d
             )
+            mask = df["eta_date"].dt.date == d
+            df.loc[mask, "rain_mm"] = w["precipitation_mm"]
+            df.loc[mask, "wind_kmh"] = w["wind_speed_kmh"]
 
-            mask = result_df["eta_date"].dt.date == d
-            result_df.loc[mask, "rain_mm"] = w["precipitation_mm"]
-            result_df.loc[mask, "wind_kmh"] = w["wind_speed_kmh"]
-
-        daily_summary = (
-            result_df
-            .groupby(result_df["eta_date"].dt.date)
-            .agg({
-                "planned_volume_ton": "sum",
-                "predicted_loading_hours": "mean",
-                "loading_efficiency": "mean",
-                "predicted_demurrage_cost": "sum",
-                "rain_mm": "mean",
-                "wind_kmh": "max",
-                "risk level": lambda x: x.mode() [0] if len(x.mode()) else "UNKNOWN"
-            })
-            .reset_index()
-            .rename(columns={"eta_date": "date"})
-            .to_dict("records")
-        )
-
-        summary = {
-            "role": "Shipping Planner",
-            "focus": "ROM-to-Jetty Hauling & Vessel Loading",
-            "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
-            "total_days": int(result_df["eta_date"].nunique()),
-            "total_volume_ton": float(result_df["planned_volume_ton"].sum()),
-            "total_vessels": int(len(result_df)),
-            "total_demurrage_cost": float(result_df["predicted_demurrage_cost"].sum()),
-            "avg_loading_efficiency": float(result_df["loading_efficiency"].mean()),
-            "high_risk_days": int((result_df["risk_level"] == "HIGH").sum()),
-            "avg_rain": float(result_df["rain_mm"].mean()),
-            "max_wind": float(result_df["wind_kmh"].max()),
-            "daily_summary": daily_summary
-        }
-        
-        route_recommendations = {
+        # ===================== HAULING SUMMARY =====================
+        hauling_summary = {
             "rom_id": rom_id,
-            "user_selected_jetty": {
-                "jetty_id": selected_jetty_id,
-                "distance_km": sel_dist,
-                "duration_min": sel_dur
-            },
+            "selected_jetty": selected_jetty,
+            "distance_km": sel_dist,
+            "duration_min": sel_dur,
             "recommended_nearest_jetty": {
                 "jetty_id": nearest_id,
                 "distance_km": nearest_dist,
                 "duration_min": nearest_dur
-            }
+            },
+            "avg_rain_mm": float(df["rain_mm"].mean()),
+            "max_wind_kmh": float(df["wind_kmh"].max())
         }
 
-        ai_summary = llm_service.summarize_shipping(summary)
+        # ===================== SHIPPING SUMMARY =====================
+        shipping_summary = {
+            "total_volume_ton": float(df["planned_volume_ton"].sum()),
+            "total_vessels": int(len(df)),
+            "avg_loading_efficiency": float(df["loading_efficiency"].mean()),
+            "total_demurrage_cost": float(df["predicted_demurrage_cost"].sum()),
+            "high_risk_vessels": int((df["risk_level"] == "HIGH").sum()),
+            "daily_summary": (
+                df.groupby(df["eta_date"].dt.date)
+                .agg({
+                    "planned_volume_ton": "sum",
+                    "predicted_loading_hours": "mean",
+                    "predicted_demurrage_cost": "sum",
+                    "risk_level": lambda x: x.mode()[0] if len(x.mode()) else "UNKNOWN"
+                })
+                .reset_index()
+                .rename(columns={"eta_date": "date"})
+                .to_dict("records")
+            )
+        }
 
-        return ShippingSummaryOutput(**summary)
+        integration_insight = (
+            "Hauling distance and jetty selection directly impact vessel "
+            "waiting time and demurrage exposure, especially during high wind "
+            "and rainfall conditions at the jetty."
+        )
+
+        ai_summary = llm_service.summarize_shipping({
+            "hauling": hauling_summary,
+            "shipping": shipping_summary
+        })
+
+        return {
+            "role": "Shipping Planner",
+            "focus": "ROM-to-Jetty Hauling & Vessel Loading Coordination",
+            "period": f"{df['eta_date'].min().date()} to {df['eta_date'].max().date()}",
+            "total_days": int(df["eta_date"].nunique()),
+            "hauling_summary": hauling_summary,
+            "shipping_summary": shipping_summary,
+            "route_recommendations": hauling_summary,
+            "integration_insight": integration_insight,
+            "ai_summary": ai_summary
+        }
 
     except Exception as e:
         raise HTTPException(
