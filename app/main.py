@@ -386,6 +386,9 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
                 target_date=d
             )
             weather_rows.append(w)
+
+        avg_rain = float(pd.DataFrame(weather_rows)["precipitation_mm"].mean())
+        max_wind = float(pd.DataFrame(weather_rows)["wind_speed_kmh"].max())
                 
         # ===================== HAULING SUMMARY =====================
         hauling_summary = {
