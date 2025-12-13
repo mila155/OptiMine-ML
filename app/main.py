@@ -126,7 +126,7 @@ async def chat_with_rag(query: str):
 async def predict_mining_single(plan: MiningPlanInput):
     try:
         data = [plan.model_dump()]
-        result_df = PredictionService.predict_mining(data)
+        result_df = prediction_service.predict_mining(data)
         response = [
             MiningPredictionOutput(**{
                 **row.to_dict(),
@@ -148,7 +148,7 @@ async def predict_mining_single(plan: MiningPlanInput):
 async def predict_mining_batch(batch: MiningPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = PredictionService.predict_mining(data)
+        result_df = prediction_service.predict_mining(data)
         response = [
             MiningPredictionOutput(**{
                 **row.to_dict(),
@@ -170,7 +170,7 @@ async def predict_mining_batch(batch: MiningPlanBatchInput):
 async def get_mining_summary(batch: MiningPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = PredictionService.predict_mining(data)
+        result_df = prediction_service.predict_mining(data)
         
         total_planned = result_df['planned_production_ton'].sum()
         total_predicted = result_df['predicted_production_ton'].sum()
@@ -205,7 +205,7 @@ async def get_mining_summary(batch: MiningPlanBatchInput):
 async def predict_shipping_single(plan: ShippingPlanInput):
     try:
         data = [plan.model_dump()]
-        result_df = PredictionService.predict_shipping(data)
+        result_df = prediction_service.predict_shipping(data)
         response = [
             ShippingPredictionOutput(**{
                 **row.to_dict(),
@@ -224,7 +224,7 @@ async def predict_shipping_single(plan: ShippingPlanInput):
 async def predict_shipping_batch(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = PredictionService.predict_shipping(data)
+        result_df = prediction_service.predict_shipping(data)
         response = [
             ShippingPredictionOutput(**{
                 **row.to_dict(),
@@ -243,7 +243,7 @@ async def predict_shipping_batch(batch: ShippingPlanBatchInput):
 async def get_shipping_summary(batch: ShippingPlanBatchInput):
     try:
         data = [plan.model_dump() for plan in batch.plans]
-        result_df = PredictionService.predict_shipping(data)
+        result_df = prediction_service.predict_shipping(data)
 
         summary = {
             "period": f"{result_df['eta_date'].min()} to {result_df['eta_date'].max()}",
@@ -274,7 +274,7 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
 async def optimize_mining(batch: MiningPlanBatchInput):
     try:
         data = [p.model_dump() for p in batch.plans]
-        pred_df = PredictionService.predict_mining(data)
+        pred_df = prediction_service.predict_mining(data)
         result = generate_top3_mining_plans(pred_df, config={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
@@ -289,7 +289,7 @@ async def optimize_mining(batch: MiningPlanBatchInput):
 async def optimize_shipping(batch: ShippingPlanBatchInput):
     try:
         data = [p.model_dump() for p in batch.plans]
-        pred_df = PredictionService.predict_shipping(data)
+        pred_df = prediction_service.predict_shipping(data)
         result = generate_top3_shipping_plans(pred_df, config={
             "model": "llama-3.3-70b-versatile",
             "temperature": 0.2,
