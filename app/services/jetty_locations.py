@@ -1,4 +1,4 @@
-JETTY_COORDINATES = {
+JETTY_LOCATIONS = {
     "JTY001": {"lat": -3.4521, "lon": 114.3265},
     "JTY002": {"lat": -2.9875, "lon": 115.1023},
     "JTY003": {"lat": -3.2299, "lon": 114.7893},
