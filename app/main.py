@@ -1,15 +1,12 @@
 import io
 import os
 import pandas as pd
-from datetime import datetime
-from typing import List
 
 from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from datetime import datetime
 from typing import List
-import app
 from app.rag import rag_engine
 from app.services import llm
 from app.services import rag_services
@@ -51,51 +48,51 @@ from app.services.optimization import (
 #         else:
 #             return "No document context available."
 
-# DOCS_PATH = "app/rag/documents"
+DOCS_PATH = "app/rag/documents"
 
-# # untuk optimization (string context, robust)
-# rag_engine = RAGEngineSafe(DOCS_PATH)
+# untuk optimization (string context, robust)
+rag_engine = RAGEngineSafe(DOCS_PATH)
 
-# # untuk chatbot & summary (doc-level, explainable)
-# rag_service = RAGService(DOCS_PATH)
+# untuk chatbot & summary (doc-level, explainable)
+rag_service = RAGService(DOCS_PATH)
 
-# # ==================== FASTAPI SETUP ====================
+# ==================== FASTAPI SETUP ====================
 
-# app = FastAPI(
-#     title="OptiMine API",
-#     description="AI-powered Mining & Shipping Operations Optimization",
-#     version="1.0.0",
-#     docs_url="/docs",
-#     redoc_url="/redoc"
-# )
+app = FastAPI(
+    title="OptiMine API",
+    description="AI-powered Mining & Shipping Operations Optimization",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["*"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# models_dir = os.getenv("MODELS_DIR", "models")
-# prediction_service = PredictionService(models_dir=models_dir)
+models_dir = os.getenv("MODELS_DIR", "models")
+prediction_service = PredictionService(models_dir=models_dir)
 
-# # ==================== ROUTES ==========================
+# ==================== ROUTES ==========================
 
-# @app.get("/")
-# async def home():
-#     return {"message": "API is running successfully!"}
+@app.get("/")
+async def home():
+    return {"message": "API is running successfully!"}
 
-# @app.get("/health", response_model=HealthCheck, tags=["Health"])
-# async def health_check():
-#     models_status = prediction_service.is_healthy()
-#     return HealthCheck(
-#         status="healthy" if all(models_status.values()) and rag_engine.ready else "degraded",
-#         timestamp=datetime.now(),
-#         models_loaded=models_status,
-#         rag_status="healthy" if rag_engine.ready else "degraded",
-#         api_version="1.0.0"
-#     )
+@app.get("/health", response_model=HealthCheck, tags=["Health"])
+async def health_check():
+    models_status = prediction_service.is_healthy()
+    return HealthCheck(
+        status="healthy" if all(models_status.values()) and rag_engine.ready else "degraded",
+        timestamp=datetime.now(),
+        models_loaded=models_status,
+        rag_status="healthy" if rag_engine.ready else "degraded",
+        api_version="1.0.0"
+    )
 
 # ==================== CHATBOT ====================
 
