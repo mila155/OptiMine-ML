@@ -107,17 +107,11 @@ class ShippingSummaryOutput(BaseModel):
     focus: str
     period: str
     total_days: int
-    total_volume_ton: float
-    total_vessels: int
-    total_demurrage_cost: float
-    avg_loading_efficiency: float
-    high_risk_days: int
-    avg_rain: float
-    max_wind: float
-    daily_summary: List[Dict[str, Any]]
+    hauling_summary: Dict[str, Any]
+    shipping_summary: Dict[str, Any]
     route_recommendations: Dict[str, Any]
+    integration_insight: str
     ai_summary: Optional[str] = None
-    ai_notes: Optional[Dict[str, Any]] = None
 
 # ==================== OPTIMIZATION SCHEMAS ====================
 
