@@ -9,10 +9,7 @@ class RAGRetriever:
             results = self.store.search(query, top_k)
             if not results:
                 return "Tidak ada konteks relevan tersedia."
-            
-            # gabungkan kedua fitur:
-            # - versi kamu: tampilkan source
-            # - versi main: fallback message
+
             return "\n".join([f"[{r['source']}] {r['text']}" for r in results])
         
         except Exception:
