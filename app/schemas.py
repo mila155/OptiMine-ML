@@ -142,6 +142,22 @@ class CombinedOptimizationOutput(BaseModel):
     shipping_plan: ShippingOptimizationOutput
     timestamp: datetime
 
+# ==================== CUSTOM OPTIMIZATION SCHEMAS ====================
+
+class MiningCustomOptimizationInput(BaseModel):
+    plans: List[MiningPlanInput]
+    strategy_name: str = "Custom Plan"
+    prod_multiplier: float = Field(..., description="Target produksi multiplier (e.g. 1.05 for +5%)")
+    risk_threshold: float = Field(..., description="Batas toleransi risiko (0.0 - 1.0)")
+    description: Optional[str] = "Rencana kustom pengguna"
+
+class ShippingCustomOptimizationInput(BaseModel):
+    plans: List[ShippingPlanInput]
+    strategy_name: str = "Custom Plan"
+    ship_multiplier: float = Field(..., description="Target volume multiplier")
+    risk_threshold: float = Field(..., description="Batas toleransi risiko")
+    description: Optional[str] = "Rencana kustom pengguna"
+    
 # ==================== HEALTH CHECK ====================
 
 class HealthCheck(BaseModel):
