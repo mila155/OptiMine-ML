@@ -1,13 +1,9 @@
+# app/rag/rag_engine.py
 from app.rag.retriever import RAGRetriever
 from app.rag.vectorstore import VectorStore
 
 
 class RAGEngineSafe:
-    """
-    RAG Engine Safe:
-    - Mengambil konteks dari dokumen secara aman
-    - Jika error / dokumen kosong / query invalid, tetap return string aman
-    """
     def __init__(self, docs_path="app/rag/documents"):
         self.docs_path = docs_path
         self.vs = None
@@ -19,18 +15,17 @@ class RAGEngineSafe:
             self.vs = VectorStore(self.docs_path)
             self.vs.build()
             self.retriever = RAGRetriever(self.vs)
-        except Exception:
+        except Exception as e:
+            print("RAG init error:", e)
             self.vs = None
             self.retriever = None
 
-    # <<< ini harus di-indent di sini
     def get_context(self, query: str, k: int = 5) -> str:
         if not query:
-            return "Tidak ada konteks tersedia"
+            return ""
         try:
             if self.retriever:
-                ctx = self.retriever.get_context(query, top_k=k)
-                return ctx or "Tidak ada konteks tersedia"
+                return self.retriever.get_context(query, top_k=k)
         except Exception:
             pass
-        return "Tidak ada konteks tersedia"  # fallback aman
+        return ""
