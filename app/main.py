@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, APIRouter, FastAPI, HTTPException, status, UploadFile, File
+from fastapi import FastAPI, HTTPException, status, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -398,8 +398,7 @@ async def optimize_shipping(batch: ShippingPlanBatchInput):
         raise HTTPException(status_code=500, detail=f"Shipping optimization failed: {str(e)}")
 
 # ==================== CHATBOT ====================
-ChatbotService
-chatbot_service = ChatbotService()
+chatbot_service = ChatbotService(rag_engine)
 
 @app.post(
     "/chat",
