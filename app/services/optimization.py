@@ -794,30 +794,42 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
             for i, (_, row) in enumerate(daily_df.iterrows(), 1):
                 original_ton = row['planned_volume_ton']
                 
-                if "Conservative" in s['name']:
-                    if row['wind_speed_kmh'] > 25:
-                        adjusted_ton = original_ton * 0.85
-                        rationale = "Kurangi volume 15% karena risiko cuaca/demurrage"
-                    else:
-                        adjusted_ton = original_ton * 0.95
-                        rationale = "Operasi pengiriman normal dengan pendekatan hati-hati"
+                eff_score = row.get('loading_efficiency', 0.6)
+                demurrage_score = max(0, 1 - (row.get('predicted_demurrage_cost', 0) / 50000))
+
+                wind = row.get('wind_speed_kmh', 0)
+                if wind > 30: wind_score = 0.4     
+                elif wind > 20: wind_score = 0.7   
+                else: wind_score = 1.0             
+
+                calculated_conf = (eff_score * 0.5) + (demurrage_score * 0.3) + (wind_score * 0.2)
+                calculated_conf = round(max(0.1, min(1.0, calculated_conf)), 2)
                 
-                elif "Aggressive" in s['name']:
-                    if row['loading_efficiency'] < 0.5:
-                        adjusted_ton = original_ton * 0.935  # Kurangi 6.5%
-                        rationale = "Kurangi volume 15% pada kondisi tidak optimal"
+                if "Conservative" in s['name']:
+                    if calculated_conf < 0.7: 
+                        multiplier = 0.85
+                        rationale = f"Risk Mitigation: Confidence rendah ({calculated_conf})"
                     else:
-                        adjusted_ton = original_ton * 1.10
-                        rationale = "Operasi pengiriman maksimal untuk capai target tinggi"
+                        multiplier = 0.95
+                        rationale = "Operasi hati-hati (Standard Conservative)"
+                                    
+                elif "Aggressive" in s['name']:
+                    if calculated_conf < 0.5:
+                        multiplier = 0.95 
+                        rationale = "Adjustment: Kondisi sangat berisiko"
+                    else:
+                        multiplier = 1.10
+                        rationale = "Max Throughput: Memanfaatkan peluang"
                 
                 else:  
-                    if row['wind_speed_kmh'] > 25 or row['loading_efficiency'] < 0.6:
-                        adjusted_ton = original_ton * 0.85
-                        rationale = "Kurangi volume 15% untuk antisipasi risiko"
+                    if calculated_conf < 0.6:
+                        multiplier = 0.90
+                        rationale = f"Balancing: Antisipasi risiko ({calculated_conf})"
                     else:
-                        adjusted_ton = original_ton
-                        rationale = "Operasi pengiriman normal sesuai rencana"
+                        multiplier = 1.00
+                        rationale = "Operasi normal sesuai rencana"
                 
+                adjusted_ton = original_ton * multiplier
                 baseline_revenue = original_ton * 65
                 optimized_revenue = adjusted_ton * 65
                 
@@ -837,7 +849,7 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                     "baseline_revenue_usd": round(baseline_revenue, 2),
                     "optimized_revenue_usd": round(optimized_revenue, 2),
                     "demurrage_cost_usd": round(row['predicted_demurrage_cost'], 2),
-                    "confidence_score": round(row['confidence_score'], 2) if not pd.isna(row['confidence_score']) else 0.6,
+                    "confidence_score": calculated_conf,                    
                     "weather_condition": f"Angin: {round(row['wind_speed_kmh'], 1)}km/j",
                     "rationale": rationale
                 })
@@ -1173,14 +1185,22 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
         demurrage_savings = 0
 
         for i, (_, row) in enumerate(daily_df.iterrows(), 1):
-            original_ton = row['planned_volume_ton']
+            original_ton = row['planned_volume_ton']            
+            eff_score = row.get('loading_efficiency', 0.6)
+            demurrage_score = max(0, 1 - (row.get('predicted_demurrage_cost', 0) / 50000))
             
+            wind = row.get('wind_speed_kmh', 0)
+            if wind > 30: wind_score = 0.4
+            elif wind > 20: wind_score = 0.7
+            else: wind_score = 1.0          
+            
+            calculated_conf = (eff_score * 0.5) + (demurrage_score * 0.3) + (wind_score * 0.2)
+            calculated_conf = round(max(0.1, min(1.0, calculated_conf)), 2)
             multiplier = s['ship_multiplier']
             
-            efficiency = row['loading_efficiency']
-            if efficiency < s['risk_threshold']:
+            if calculated_conf < s['risk_threshold']:
                 multiplier *= 0.9 
-                rationale = "Adjustment: Kondisi di bawah risk threshold user"
+                rationale = f"Adjustment: Confidence rendah ({calculated_conf})"
             else:
                 rationale = "Adjustment: Sesuai target multiplier user"
 
@@ -1285,5 +1305,6 @@ def _generate_limitations_ai_wrapper(s, f):
         "Ketersediaan alat/armada harus dipastikan manual",
         "Analisis risiko bergantung pada input parameter user"
     ]
+
 
 
