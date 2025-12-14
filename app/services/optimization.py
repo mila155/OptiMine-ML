@@ -830,6 +830,7 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                 optimized_schedule.append({
                     "date": row['eta_date'].strftime('%Y-%m-%d %H:%M:%S'),
                     "day": i,
+                    "plan_id": f"PDS{i:04d}",
                     "original_shipping_ton": round(original_ton, 0),
                     "optimized_shipping_ton": round(adjusted_ton, 0),
                     "adjustment_pct": round(((adjusted_ton - original_ton) / original_ton * 100), 2) if original_ton > 0 else 0,
@@ -1284,4 +1285,5 @@ def _generate_limitations_ai_wrapper(s, f):
         "Ketersediaan alat/armada harus dipastikan manual",
         "Analisis risiko bergantung pada input parameter user"
     ]
+
 
