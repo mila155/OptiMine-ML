@@ -469,17 +469,12 @@ async def optimize_shipping(batch: ShippingPlanBatchInput):
         raise HTTPException(status_code=500, detail=f"Shipping optimization failed: {str(e)}")
 
 @app.post("/mining/optimize/custom", tags=["Optimization"])
-async def optimize_mining_custom(payload: MiningCustomOptimizationInput):
+async def optimize_mining_custom(payload: MiningPlanBatchInput):
     try:
         data = [p.model_dump() for p in payload.plans]
         pred_df = prediction_service.predict_mining(data)
         
-        custom_params = {
-            "strategy_name": payload.strategy_name,
-            "prod_multiplier": payload.prod_multiplier,
-            "risk_threshold": payload.risk_threshold,
-            "description": payload.description
-        }
+        custom_params = {}
         
         result = generate_custom_mining_plan(pred_df, custom_params, config={
             "model": "llama-3.3-70b-versatile",
@@ -494,17 +489,12 @@ async def optimize_mining_custom(payload: MiningCustomOptimizationInput):
 
 
 @app.post("/shipping/optimize/custom", tags=["Optimization"])
-async def optimize_shipping_custom(payload: ShippingCustomOptimizationInput):
+async def optimize_shipping_custom(payload: ShippingPlanBatchInput):
     try:
         data = [p.model_dump() for p in payload.plans]
         pred_df = prediction_service.predict_shipping(data)
         
-        custom_params = {
-            "strategy_name": payload.strategy_name,
-            "ship_multiplier": payload.ship_multiplier,
-            "risk_threshold": payload.risk_threshold,
-            "description": payload.description
-        }
+        custom_params = {}
         
         result = generate_custom_shipping_plan(pred_df, custom_params, config={
             "model": "llama-3.3-70b-versatile",
