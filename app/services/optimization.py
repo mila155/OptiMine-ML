@@ -1098,7 +1098,7 @@ def generate_custom_mining_plan(predictions: pd.DataFrame, params: Dict[str, Any
             "schedule_sample": optimized_schedule[:3] 
         }
 
-        if AI_AVAILABLE:
+        if _OPT_AI_AVAILABLE:
             print("Generating Custom Mining Plan analysis with AI...")
             
             strengths = generate_strengths_ai(plan_context, "mining", config)
@@ -1222,7 +1222,7 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
             "schedule_sample": optimized_schedule[:3]
         }
 
-        if AI_AVAILABLE:
+        if _OPT_AI_AVAILABLE:
             print("Generating Custom Shipping Plan analysis with AI...")
             strengths = generate_strengths_ai(plan_context, "shipping", config)
             limitations = generate_limitations_ai(plan_context, "shipping", config)
@@ -1285,3 +1285,4 @@ def _generate_limitations_ai_wrapper(s, f):
         "Ketersediaan alat/armada harus dipastikan manual",
         "Analisis risiko bergantung pada input parameter user"
     ]
+
