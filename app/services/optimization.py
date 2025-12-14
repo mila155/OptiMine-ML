@@ -793,49 +793,40 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
             
             for i, (_, row) in enumerate(daily_df.iterrows(), 1):
                 original_ton = row['planned_volume_ton']
-                
-                eff_score = row.get('loading_efficiency', 0.6)
-                raw_demurrage = float(row.get('predicted_demurrage_cost', 0))
-                demurrage_val = max(0.0, raw_demurrage)
-                demurrage_score = max(0.0, 1.0 - (demurrage_val / 50000.0))
-
-                wind = row.get('wind_speed_kmh', 0)
-                if wind > 30: wind_score = 0.4     
-                elif wind > 20: wind_score = 0.7   
-                else: wind_score = 1.0             
-
-                calculated_conf = (eff_score * 0.5) + (demurrage_score * 0.3) + (wind_score * 0.2)
-                calculated_conf = round(max(0.1, min(1.0, calculated_conf)), 2)
-                
+                efficiency_val = float(row.get('loading_efficiency', 0.6))
+                efficiency_score = round(max(0.1, min(1.0, efficiency_val)), 2)                  
+                               
                 if "Conservative" in s['name']:
-                    if calculated_conf < 0.7: 
+                    if efficiency_score < 0.7: 
                         multiplier = 0.85
-                        rationale = f"Risk Mitigation: Confidence rendah ({calculated_conf})"
+                        rationale = f"Efficiency Low ({efficiency_score}): Volume dikurangi"
                     else:
                         multiplier = 0.95
-                        rationale = "Operasi hati-hati (Standard Conservative)"
+                        rationale = "Operasi konservatif standar"
                                     
                 elif "Aggressive" in s['name']:
-                    if calculated_conf < 0.5:
+                    if efficiency_score < 0.5:
                         multiplier = 0.95 
-                        rationale = "Adjustment: Kondisi sangat berisiko"
+                        rationale = "Efficiency Critical: Target disesuaikan"
                     else:
                         multiplier = 1.10
-                        rationale = "Max Throughput: Memanfaatkan peluang"
+                        rationale = "High Throughput Mode"
                 
                 else:  
-                    if calculated_conf < 0.6:
+                    if efficiency_score < 0.6:
                         multiplier = 0.90
-                        rationale = f"Balancing: Antisipasi risiko ({calculated_conf})"
+                        rationale = f"Balanced Adjustment: Eff {efficiency_score}"
                     else:
                         multiplier = 1.00
-                        rationale = "Operasi normal sesuai rencana"
+                        rationale = "Operasi normal"
                 
                 adjusted_ton = original_ton * multiplier
                 baseline_revenue = original_ton * 65
                 optimized_revenue = adjusted_ton * 65
                 
-                demurrage_saving = row['predicted_demurrage_cost'] * (1 - (adjusted_ton / original_ton)) if original_ton > 0 else 0
+                raw_demurrage = float(row['predicted_demurrage_cost'])
+                demurrage_base = max(0.0, raw_demurrage) 
+                demurrage_saving = demurrage_base * (1 - multiplier) if multiplier < 1.0 else 0
                 
                 baseline_total_revenue += baseline_revenue
                 optimized_total_revenue += optimized_revenue
@@ -851,7 +842,8 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                     "baseline_revenue_usd": round(baseline_revenue, 2),
                     "optimized_revenue_usd": round(optimized_revenue, 2),
                     "demurrage_cost_usd": round(row['predicted_demurrage_cost'], 2),
-                    "confidence_score": calculated_conf,                    
+                    "efficiency_score": efficiency_score,  
+                    "confidence_score": efficiency_score,                   
                     "weather_condition": f"Angin: {round(row['wind_speed_kmh'], 1)}km/j",
                     "rationale": rationale
                 })
@@ -1188,31 +1180,27 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
 
         for i, (_, row) in enumerate(daily_df.iterrows(), 1):
             original_ton = row['planned_volume_ton']            
-            eff_score = row.get('loading_efficiency', 0.6)
-            raw_demurrage = float(row.get('predicted_demurrage_cost', 0))
-            demurrage_val = max(0.0, raw_demurrage)
-            demurrage_score = max(0.0, 1.0 - (demurrage_val / 50000.0))
-            
-            wind = row.get('wind_speed_kmh', 0)
-            if wind > 30: wind_score = 0.4
-            elif wind > 20: wind_score = 0.7
-            else: wind_score = 1.0          
-            
+            efficiency_val = float(row.get('loading_efficiency', 0.6))
+            efficiency_score = round(max(0.1, min(1.0, efficiency_val)), 2)            
+            multiplier = s['ship_multiplier']            
+                      
             calculated_conf = (eff_score * 0.5) + (demurrage_score * 0.3) + (wind_score * 0.2)
             calculated_conf = round(max(0.1, min(1.0, calculated_conf)), 2)
             multiplier = s['ship_multiplier']
             
-            if calculated_conf < s['risk_threshold']:
+            if efficiency_score < s['risk_threshold']:
                 multiplier *= 0.9 
-                rationale = f"Adjustment: Confidence rendah ({calculated_conf})"
+                rationale = f"Safety Cut: Eff {efficiency_score} < Threshold {s['risk_threshold']}"
             else:
-                rationale = "Adjustment: Sesuai target multiplier user"
+                rationale = f"On Target ({multiplier}x)"
 
             adjusted_ton = original_ton * multiplier
             
             baseline_rev = original_ton * 65
             optimized_rev = adjusted_ton * 65
-            demurrage_save = row['predicted_demurrage_cost'] * (1 - (adjusted_ton / original_ton)) if original_ton > 0 else 0
+            raw_demurrage = float(row.get('predicted_demurrage_cost', 0))
+            demurrage_base = max(0.0, raw_demurrage)
+            demurrage_save = demurrage_base * (1 - multiplier) if multiplier < 1.0 else 0
 
             baseline_total_revenue += baseline_rev
             optimized_total_revenue += optimized_rev
@@ -1227,7 +1215,8 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
                 "baseline_revenue_usd": round(baseline_rev, 2),
                 "optimized_revenue_usd": round(optimized_rev, 2),
                 "demurrage_cost_usd": round(row['predicted_demurrage_cost'], 2),
-                "confidence_score": round(row.get('confidence_score', 0.6), 2),
+                "efficiency_score": efficiency_score,
+                "confidence_score": efficiency_score,
                 "rationale": rationale
             })
 
@@ -1309,6 +1298,7 @@ def _generate_limitations_ai_wrapper(s, f):
         "Ketersediaan alat/armada harus dipastikan manual",
         "Analisis risiko bergantung pada input parameter user"
     ]
+
 
 
 
