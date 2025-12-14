@@ -1,3 +1,4 @@
+# app/services/llm_service.py
 import json
 from app.services.llm import call_groq
 
@@ -8,6 +9,18 @@ DEFAULT_LLM_CONFIG = {
 }
 
 class LLMService:
+    
+    def generate(self, prompt: str, max_tokens: int = 1000, temperature: float = 0.7) -> str:
+        """
+        Generate response from prompt using Groq
+        """
+        config = {
+            "model": DEFAULT_LLM_CONFIG["model"],
+            "temperature": temperature,
+            "max_tokens": max_tokens
+        }
+        
+        return call_groq(prompt, config)
 
     def summarize_mining(self, summary: dict) -> str:       
         prompt = f"""
