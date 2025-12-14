@@ -103,7 +103,6 @@ Kamu adalah AI yang memberikan analisa risiko dan keterbatasan rencana optimasi 
 PENTING: 
     - Sistem ini SUDAH memperhitungkan cuaca dan kondisi jalan. 
     - JANGAN tulis "tidak memperhitungkan faktor eksternal/cuaca".
-    - Fokus pada: Margin error prediksi, Human error operator, atau Force Majeure ekstrem.
     
 Berdasarkan data berikut:
 - Strategy: {plan_data.get("strategy")}
