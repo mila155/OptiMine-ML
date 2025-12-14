@@ -31,12 +31,11 @@ from app.schemas import (
     ChatRequest, ChatResponse, PredictionRequest, RAGQuery,
     MiningPlanInput, MiningPlanBatchInput, MiningPredictionOutput, MiningSummaryOutput,
     ShippingPlanInput, ShippingPlanBatchInput, ShippingPredictionOutput, ShippingSummaryOutput,
-    HealthCheck
+    HealthCheck, MiningCustomOptimizationInput, ShippingCustomOptimizationInput
 )
 
 from app.services.optimization import (
-    generate_top3_mining_plans,
-    generate_top3_shipping_plans
+    generate_top3_mining_plans, generate_top3_shipping_plans,generate_custom_mining_plan, generate_custom_shipping_plan
 )
 
 from app.rag.rag_engine import RAGEngineSafe
@@ -468,6 +467,55 @@ async def optimize_shipping(batch: ShippingPlanBatchInput):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Shipping optimization failed: {str(e)}")
+
+@app.post("/mining/optimize/custom", tags=["Optimization"])
+async def optimize_mining_custom(payload: MiningCustomOptimizationInput):
+    try:
+        data = [p.model_dump() for p in payload.plans]
+        pred_df = prediction_service.predict_mining(data)
+        
+        custom_params = {
+            "strategy_name": payload.strategy_name,
+            "prod_multiplier": payload.prod_multiplier,
+            "risk_threshold": payload.risk_threshold,
+            "description": payload.description
+        }
+        
+        result = generate_custom_mining_plan(pred_df, custom_params, config={
+            "model": "llama-3.3-70b-versatile",
+            "temperature": 0.2,
+            "rag_engine": rag_engine
+        })
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Custom mining optimization failed: {str(e)}")
+
+
+@app.post("/shipping/optimize/custom", tags=["Optimization"])
+async def optimize_shipping_custom(payload: ShippingCustomOptimizationInput):
+    try:
+        data = [p.model_dump() for p in payload.plans]
+        pred_df = prediction_service.predict_shipping(data)
+        
+        custom_params = {
+            "strategy_name": payload.strategy_name,
+            "ship_multiplier": payload.ship_multiplier,
+            "risk_threshold": payload.risk_threshold,
+            "description": payload.description
+        }
+        
+        result = generate_custom_shipping_plan(pred_df, custom_params, config={
+            "model": "llama-3.3-70b-versatile",
+            "temperature": 0.2,
+            "rag_engine": rag_engine
+        })
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Custom shipping optimization failed: {str(e)}")
 
 # ==================== CHATBOT ====================
 chatbot_service = ChatbotService(rag_engine)
