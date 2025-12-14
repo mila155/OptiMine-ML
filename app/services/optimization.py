@@ -3,6 +3,9 @@ import numpy as np
 from typing import List, Dict, Any, Tuple
 from datetime import datetime, timedelta
 import json
+from app.services.llm import call_groq
+from app.services.llm_service import LLMService
+llm_service = LLMService()
 
 try:
     from app.services.optimization_ai import (
@@ -13,6 +16,7 @@ try:
     _OPT_AI_AVAILABLE = True
 except Exception:
     _OPT_AI_AVAILABLE = False
+    
 
     def generate_strengths_ai(plan_data: Dict[str, Any], domain: str = "mining", config: Dict[str, Any] = None) -> List[str]:
         strengths = []
@@ -826,6 +830,7 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                 optimized_schedule.append({
                     "date": row['eta_date'].strftime('%Y-%m-%d %H:%M:%S'),
                     "day": i,
+                    "plan_id": f"PDS{i:04d}",
                     "original_shipping_ton": round(original_ton, 0),
                     "optimized_shipping_ton": round(adjusted_ton, 0),
                     "adjustment_pct": round(((adjusted_ton - original_ton) / original_ton * 100), 2) if original_ton > 0 else 0,
@@ -1026,13 +1031,7 @@ def generate_custom_mining_plan(predictions: pd.DataFrame, params: Dict[str, Any
         
         if 'plan_date' in df.columns:
             df['plan_date'] = pd.to_datetime(df['plan_date'])
-        
-        executive_summary = {
-            "period": f"{df['plan_date'].min()} hingga {df['plan_date'].max()}",
-            "total_days": int(len(df['plan_date'].unique())),
-            "total_planned_production_ton": float(df['planned_production_ton'].sum()) if 'planned_production_ton' in df.columns else 0.0,
-        }
-
+                
         s = {
             "id": 99, 
             "name": params.get("strategy_name", "Custom Plan"),
@@ -1053,8 +1052,7 @@ def generate_custom_mining_plan(predictions: pd.DataFrame, params: Dict[str, Any
                     conf_items.append(float(row[col]))
             
             overall_conf = float(np.mean(conf_items)) if conf_items else 0.6
-            overall_conf = max(0.1, min(1.0, overall_conf))
-
+            
             adj_multiplier = s['prod_multiplier']
             
             if overall_conf < s['risk_threshold']:
@@ -1093,22 +1091,53 @@ def generate_custom_mining_plan(predictions: pd.DataFrame, params: Dict[str, Any
             "avg_risk_score": round(total_risk_score / len(df), 2) if len(df) > 0 else 0.0
         }
 
+        plan_context = {
+            "strategy": s['name'],
+            "description": s['description'],
+            "financial": financial_impact,
+            "schedule_sample": optimized_schedule[:3] 
+        }
+
+        if AI_AVAILABLE:
+            print("Generating Custom Mining Plan analysis with AI...")
+            
+            strengths = generate_strengths_ai(plan_context, "mining", config)
+            limitations = generate_limitations_ai(plan_context, "mining", config)
+            steps = generate_steps_ai(plan_context, "mining", config)
+            
+            justification_prompt = f"""
+            Buatlah justifikasi/penjelasan naratif (2 paragraf) dalam Bahasa Indonesia untuk rencana tambang kustom ini:
+            Nama: {s['name']}
+            Deskripsi User: {s['description']}
+            Impact: Penghematan ${financial_impact['cost_savings_usd']:,.0f}, Risk Score: {financial_impact['avg_risk_score']}.
+            """
+            justification = call_groq(justification_prompt, config)
+            
+        else:
+            strengths = ["Kustomisasi user", "Sesuai parameter input"]
+            limitations = ["Perlu validasi manual"]
+            steps = ["Terapkan sesuai parameter"]
+            justification = "Rencana kustom dibuat berdasarkan parameter pengguna."
+
         plan_obj = {
-            "plan_id": s['id'],
-            "plan_name": s['name'],
+            "plan_id": 99,
+            "plan_name": f"Custom: {s['name']}",
             "strategy_description": s['description'],
             "optimized_schedule": optimized_schedule,
             "financial_impact": financial_impact,
-            "implementation_steps": _generate_implementation_steps_ai(s, "mining"),
-            "strengths": _generate_strengths_ai_wrapper(s, financial_impact),
-            "limitations": _generate_limitations_ai_wrapper(s, financial_impact),
-            "justification": _generate_detailed_justification(s['name'], financial_impact, optimized_schedule)
+            "implementation_steps": steps,
+            "strengths": strengths,
+            "limitations": limitations,
+            "justification": justification
         }
 
         return {
             "plan_type": "RENCANA OPTIMASI KUSTOM (PERTAMBANGAN)",
             "generated_at": datetime.now().isoformat(),
-            "executive_summary": executive_summary,
+            "executive_summary": {
+                "period": "Custom Period",
+                "total_days": len(optimized_schedule)
+            },
             "recommendations": [plan_obj] 
         }
 
@@ -1129,18 +1158,13 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
             'wind_speed_kmh': 'mean',
             'confidence_score': 'mean'
         }).reset_index()
-
-        executive_summary = {
-            "period": f"{daily_df['eta_date'].min()} - {daily_df['eta_date'].max()}",
-            "total_days": int(len(daily_df))
-        }
-
+        
         s = {
             "id": 99,
-            "name": params.get("strategy_name", "Custom Shipping Plan"),
+            "name": params.get("strategy_name", "Custom Shipping"),
+            "description": params.get("description", ""),
             "ship_multiplier": params.get("ship_multiplier", 1.0),
-            "risk_threshold": params.get("risk_threshold", 0.6),
-            "description": params.get("description", "User defined shipping strategy")
+            "risk_threshold": params.get("risk_threshold", 0.6)
         }
 
         optimized_schedule = []
@@ -1191,22 +1215,49 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
             "avg_risk_score": round(1 - (daily_df['loading_efficiency'].mean()), 2)
         }
 
+        plan_context = {
+            "strategy": s['name'],
+            "description": s['description'],
+            "financial": financial_impact,
+            "schedule_sample": optimized_schedule[:3]
+        }
+
+        if AI_AVAILABLE:
+            print("Generating Custom Shipping Plan analysis with AI...")
+            strengths = generate_strengths_ai(plan_context, "shipping", config)
+            limitations = generate_limitations_ai(plan_context, "shipping", config)
+            steps = generate_steps_ai(plan_context, "shipping", config)
+            
+            from app.services.llm import call_groq
+            justification_prompt = f"""
+            Buat justifikasi rencana pengiriman kustom (Bahasa Indonesia):
+            Nama: {s['name']}
+            Multiplier Target: {s['ship_multiplier']}x
+            Impact: Revenue Change ${financial_impact['revenue_change_usd']:,.0f}.
+            """
+            justification = call_groq(justification_prompt, config)
+        else:
+            strengths = ["Custom plan"]
+            limitations = ["Manual check required"]
+            steps = ["Execute custom plan"]
+            justification = "Generated based on user parameters."
+
         plan_obj = {
-            "plan_id": s['id'],
-            "plan_name": s['name'],
+            "plan_id": 99,
+            "plan_name": f"Custom: {s['name']}",
             "strategy_description": s['description'],
             "optimized_schedule": optimized_schedule,
             "financial_impact": financial_impact,
-            "implementation_steps": ["Implementasikan rencana kustom", "Monitor harian"],
-            "strengths": ["Disesuaikan dengan preferensi user", f"Target multiplier {s['ship_multiplier']}x"],
-            "limitations": ["Memerlukan validasi operasional manual"],
-            "justification": f"Rencana ini dibuat khusus dengan target multiplier {s['ship_multiplier']}x dan toleransi risiko {s['risk_threshold']}."
-        }
+            "implementation_steps": steps,
+            "strengths": strengths,
+            "limitations": limitations,
+            "justification": justification
+        }    
 
         return {
             "plan_type": "RENCANA OPTIMASI KUSTOM (PENGIRIMAN)",
             "generated_at": datetime.now().isoformat(),
-            "executive_summary": executive_summary,
+            "executive_summary": {},
             "recommendations": [plan_obj]
         }
 
