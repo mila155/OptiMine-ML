@@ -49,7 +49,7 @@ def _generate_ai_justification(plan_context: Dict, domain: str, config: Dict) ->
         return "Justifikasi tidak tersedia (AI module missing)."
         
     prompt = f"""
-    Bertindaklah sebagai Senior Operations Manager di bidang {domain}.
+    Bertindaklah sebagai AI Expert Profesional di bidang {domain}.
     
     Analisis rencana optimasi berikut dan berikan JUSTIFIKASI NARATIF (2 paragraf) 
     mengapa rencana ini direkomendasikan. Gunakan Bahasa Indonesia yang profesional.
@@ -598,3 +598,4 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
 
     except Exception as e:
         return {"error": str(e)}
+
