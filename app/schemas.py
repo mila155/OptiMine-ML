@@ -216,7 +216,7 @@ class ChatResponse(BaseModel):
     Response dari chatbot
     """
     answer: str
-    sources: Optional[List[Dict[str, Any]]] = None
+    sources: List[str]
     timestamp: datetime
 
 
