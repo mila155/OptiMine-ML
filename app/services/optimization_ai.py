@@ -39,8 +39,15 @@ def _parse_ai_list_response(response_text: str) -> List[str]:
         if match:
             json_str = match.group(0)
             parsed = json.loads(json_str)
+            clean_list = []
             if isinstance(parsed, list):
-                return [str(item) for item in parsed]
+                for item in parsed:
+                    if isinstance(item, str):
+                        clean_list.append(item)
+                    elif isinstance(item, dict):
+                        vals = [str(v) for v in item.values() if isinstance(v, str)]
+                        if vals: clean_list.append(max(vals, key=len))
+                return clean_list[:5]
         
         lines = [line.strip('- *').strip() for line in response_text.split('\n') if line.strip()]
         if len(lines) >= 3:
