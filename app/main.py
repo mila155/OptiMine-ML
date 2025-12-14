@@ -508,7 +508,7 @@ async def optimize_shipping_custom(payload: ShippingPlanBatchInput):
         raise HTTPException(status_code=500, detail=f"Custom shipping optimization failed: {str(e)}")
 
 # ==================== CHATBOT ====================
-chatbot_service = ChatbotService(rag_engine)
+chatbot_service = ChatbotService(rag_engine=rag_engine)
 
 @app.post(
     "/chat",
