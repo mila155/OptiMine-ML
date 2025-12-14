@@ -46,8 +46,13 @@ def _parse_ai_list_response(response_text: str) -> List[str]:
                         clean_list.append(item)
                     elif isinstance(item, dict):
                         vals = [str(v) for v in item.values() if isinstance(v, str)]
-                        if vals: clean_list.append(max(vals, key=len))
-                return clean_list[:5]
+                        if vals:
+                            preferred = item.get('deskripsi') or item.get('tindakan') or max(vals, key=len)
+                            clean_list.append(str(preferred))
+                        else:
+                            clean_list.append(str(item))
+                            
+            return clean_list[:5] if clean_list else []
         
         lines = [line.strip('- *').strip() for line in response_text.split('\n') if line.strip()]
         if len(lines) >= 3:
@@ -62,19 +67,21 @@ def generate_strengths_ai(plan_data: Dict, domain: str, config: Dict) -> List[st
     rag_context = _get_rag_context(plan_data.get("strategy"))
 
     prompt = f"""
-Gunakan konteks berikut:
-{rag_context}
-
-Kamu adalah AI yang memberikan penilaian professional mengenai rencana optimasi {domain}.
-
-Berdasarkan data berikut:
-- Strategy: {plan_data.get("strategy")}
-- Financial: {plan_data.get("financial")}
-- Jumlah schedule item: {len(plan_data.get("schedule", []))}
-
-Tuliskan 3 kelebihan (strengths) yang spesifik, realistis, teknis, dan relevan dalam bahasa Indonesia Formal.
-Gunakan format list JSON: ["...", "...", "..."].
-"""
+       Gunakan konteks berikut: {rag_context}
+       Analisis rencana: "({plan_data.get('strategy')})" ({plan_data.get('description')})
+       Impact: {json.dumps(plan_data.get('financial', {}))}
+       
+       Kamu adalah AI yang memberikan penilaian professional mengenai rencana optimasi {domain}.
+       
+       Berdasarkan data berikut:
+       - Strategy: {plan_data.get("strategy")}
+       - Financial: {plan_data.get("financial")}
+       - Jumlah schedule item: {len(plan_data.get("schedule", []))}
+       
+       Tuliskan 3 kelebihan (strengths) yang spesifik, realistis, teknis, dan relevan dalam bahasa Indonesia Formal.
+       Konteks Sistem: Sistem ini SUDAH menggunakan data real-time (cuaca, alat, dll).
+       Gunakan format list JSON: ["...", "...", "..."].
+       """
 
     try:
         resp = call_groq(prompt, config)
@@ -89,9 +96,15 @@ def generate_limitations_ai(plan_data: Dict, domain: str, config: Dict) -> List[
     prompt = f"""
 Gunakan konteks berikut:
 {rag_context}
+Analisis risiko strategi: {plan_data.get('strategy')}
 
 Kamu adalah AI yang memberikan analisa risiko dan keterbatasan rencana optimasi {domain}.
 
+PENTING: 
+    - Sistem ini SUDAH memperhitungkan cuaca dan kondisi jalan. 
+    - JANGAN tulis "tidak memperhitungkan faktor eksternal/cuaca".
+    - Fokus pada: Margin error prediksi, Human error operator, atau Force Majeure ekstrem.
+    
 Berdasarkan data berikut:
 - Strategy: {plan_data.get("strategy")}
 - Financial: {plan_data.get("financial")}
