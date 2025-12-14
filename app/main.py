@@ -382,9 +382,6 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
         # ===================== HAULING SUMMARY =====================
         hauling_summary = {
             "rom_id": rom_id,
-            "selected_jetty": selected_jetty,
-            "distance_km": sel_dist,
-            "duration_min": sel_dur,
             "recommended_nearest_jetty": {
                 "jetty_id": nearest_id,
                 "distance_km": nearest_dist,
@@ -433,7 +430,6 @@ async def get_shipping_summary(batch: ShippingPlanBatchInput):
             "total_days": int(df["eta_date"].nunique()),
             "hauling_summary": hauling_summary,
             "shipping_summary": shipping_summary,
-            "route_recommendations": hauling_summary,
             "integration_insight": integration_insight,
             "ai_summary": ai_summary
         }
