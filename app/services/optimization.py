@@ -795,7 +795,9 @@ def generate_top3_shipping_plans(predictions: pd.DataFrame, config: Dict[str, An
                 original_ton = row['planned_volume_ton']
                 
                 eff_score = row.get('loading_efficiency', 0.6)
-                demurrage_score = max(0, 1 - (row.get('predicted_demurrage_cost', 0) / 50000))
+                raw_demurrage = float(row.get('predicted_demurrage_cost', 0))
+                demurrage_val = max(0.0, raw_demurrage)
+                demurrage_score = max(0.0, 1.0 - (demurrage_val / 50000.0))
 
                 wind = row.get('wind_speed_kmh', 0)
                 if wind > 30: wind_score = 0.4     
@@ -1187,7 +1189,9 @@ def generate_custom_shipping_plan(predictions: pd.DataFrame, params: Dict[str, A
         for i, (_, row) in enumerate(daily_df.iterrows(), 1):
             original_ton = row['planned_volume_ton']            
             eff_score = row.get('loading_efficiency', 0.6)
-            demurrage_score = max(0, 1 - (row.get('predicted_demurrage_cost', 0) / 50000))
+            raw_demurrage = float(row.get('predicted_demurrage_cost', 0))
+            demurrage_val = max(0.0, raw_demurrage)
+            demurrage_score = max(0.0, 1.0 - (demurrage_val / 50000.0))
             
             wind = row.get('wind_speed_kmh', 0)
             if wind > 30: wind_score = 0.4
@@ -1305,6 +1309,7 @@ def _generate_limitations_ai_wrapper(s, f):
         "Ketersediaan alat/armada harus dipastikan manual",
         "Analisis risiko bergantung pada input parameter user"
     ]
+
 
 
 
