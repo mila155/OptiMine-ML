@@ -2,9 +2,8 @@ import uuid
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
-# Import RAG engine
-from app.rag.rag_engine import build_context
-from app.rag.rag_engine import RAGEngineSafe  # atau SafeRAGEngine dari main
+from app.services.chat_context_builder import build_context
+from app.rag.rag_engine import RAGEngineSafe 
 from app.services.llm_service import LLMService
 
 class ChatbotService:
@@ -29,15 +28,12 @@ class ChatbotService:
         """
         Handle chat message with optional context and RAG
         """
-        # 1. Validasi input
         if not message or not session_id:
             return self._error_response("Pesan dan session_id diperlukan")
         
-        # 2. Inisialisasi session jika belum ada
         if session_id not in self.conversation_history:
             self.conversation_history[session_id] = []
         
-        # 3. Ambil konteks dari RAG jika tersedia
         rag_context = ""
         if self.rag_engine and hasattr(self.rag_engine, 'get_context'):
             try:
@@ -46,12 +42,10 @@ class ChatbotService:
                 print(f"⚠️ RAG retrieval error: {e}")
                 rag_context = ""
         
-        # 4. Build structured context dari context_type
         structured_context = ""
         if context_type and context_payload:
             structured_context = build_context(context_type, context_payload)
         
-        # 5. Gabungkan semua konteks
         full_context = f"""
 ROLE: {role.upper()}
 USER QUESTION: {message}
@@ -66,14 +60,12 @@ DOCUMENT CONTEXT (dari RAG):
 {'='*50}
 """
         
-        # 6. Tambahkan conversation history (last 3 messages)
         history = self.conversation_history[session_id][-3:] if self.conversation_history[session_id] else []
         history_text = "\n".join([
             f"User: {h['question']}\nAssistant: {h['answer'][:100]}..." 
             for h in history
         ]) if history else "Tidak ada riwayat percakapan sebelumnya"
         
-        # 7. Format prompt untuk LLM
         system_prompt = f"""Anda adalah asisten AI untuk perusahaan pertambangan dan pengapalan (OptiMine).
 Peran Anda: {role}
         
@@ -94,7 +86,6 @@ Pertanyaan User: {message}
 
 Jawaban:"""
         
-        # 8. Generate response dari LLM
         try:
             answer = self.llm_service.generate(
                 prompt=system_prompt,
@@ -105,10 +96,8 @@ Jawaban:"""
             print(f"LLM error: {e}")
             answer = f"Maaf, terjadi kesalahan dalam memproses pertanyaan Anda. Error: {str(e)}"
         
-        # 9. Extract sources dari RAG context (jika ada)
         sources = self._extract_sources(rag_context)
         
-        # 10. Update conversation history
         self.conversation_history[session_id].append({
             "timestamp": datetime.now().isoformat(),
             "question": message,
@@ -117,11 +106,9 @@ Jawaban:"""
             "role": role
         })
         
-        # 11. Trim history (max 10 messages per session)
         if len(self.conversation_history[session_id]) > 10:
             self.conversation_history[session_id] = self.conversation_history[session_id][-10:]
         
-        # 12. Return response
         return {
             "answer": answer,
             "sources": sources,
