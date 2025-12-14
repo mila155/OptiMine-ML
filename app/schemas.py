@@ -109,7 +109,6 @@ class ShippingSummaryOutput(BaseModel):
     total_days: int
     hauling_summary: Dict[str, Any]
     shipping_summary: Dict[str, Any]
-    route_recommendations: Dict[str, Any]
     integration_insight: str
     ai_summary: Optional[str] = None
 
