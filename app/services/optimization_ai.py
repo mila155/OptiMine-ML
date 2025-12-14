@@ -7,10 +7,11 @@ Handles:
 With RAG + LLM (Groq) integration
 """
 
+import re
+import json
 from typing import Dict, List
 from app.services.llm import call_groq
 
-# Try RAG engine
 try:
     from app.rag.rag_engine import RAG_ENGINE
 except:
@@ -18,7 +19,6 @@ except:
 
 
 def _get_rag_context(query: str) -> str:
-    """Fetch context from RAG engine (safe)."""
     if not query:
         return ""
     try:
@@ -29,10 +29,28 @@ def _get_rag_context(query: str) -> str:
         pass
     return ""
 
+def _parse_ai_list_response(response_text: str) -> List[str]:
+    try:
+        cleaned = re.sub(r'```json\s*|\s*```', '', response_text).strip()
+        cleaned = re.sub(r'```python\s*|\s*```', '', cleaned).strip()
+        cleaned = re.sub(r'```\s*|\s*```', '', cleaned).strip()
+        
+        match = re.search(r'\[.*\]', cleaned, re.DOTALL)
+        if match:
+            json_str = match.group(0)
+            parsed = json.loads(json_str)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+        
+        lines = [line.strip('- *').strip() for line in response_text.split('\n') if line.strip()]
+        if len(lines) >= 3:
+            return lines[:5] 
+            
+        return []
+    except Exception as e:
+        print(f"Error parsing AI response: {e}")
+        return []
 
-# ============================================================
-# 1. Strengths
-# ============================================================
 def generate_strengths_ai(plan_data: Dict, domain: str, config: Dict) -> List[str]:
     rag_context = _get_rag_context(plan_data.get("strategy"))
 
@@ -47,7 +65,7 @@ Berdasarkan data berikut:
 - Financial: {plan_data.get("financial")}
 - Jumlah schedule item: {len(plan_data.get("schedule", []))}
 
-Tuliskan 3 kelebihan (strengths) yang spesifik, realistis, teknis, dan relevan.
+Tuliskan 3 kelebihan (strengths) yang spesifik, realistis, teknis, dan relevan dalam bahasa Indonesia Formal.
 Gunakan format list JSON: ["...", "...", "..."].
 """
 
@@ -58,9 +76,6 @@ Gunakan format list JSON: ["...", "...", "..."].
         return ["Strength 1", "Strength 2", "Strength 3"]
 
 
-# ============================================================
-# 2. Limitations
-# ============================================================
 def generate_limitations_ai(plan_data: Dict, domain: str, config: Dict) -> List[str]:
     rag_context = _get_rag_context(plan_data.get("strategy"))
 
@@ -75,7 +90,7 @@ Berdasarkan data berikut:
 - Financial: {plan_data.get("financial")}
 - Schedule items: {len(plan_data.get("schedule", []))}
 
-Tuliskan 3 keterbatasan (limitations) yang objektif, teknis, dan masuk akal.
+Tuliskan 3 keterbatasan (limitations) yang objektif, teknis, dan masuk akal dalam bahasa Indonesia Formal.
 Format list JSON saja.
 """
 
@@ -86,9 +101,6 @@ Format list JSON saja.
         return ["Limitation 1", "Limitation 2", "Limitation 3"]
 
 
-# ============================================================
-# 3. Implementation Steps
-# ============================================================
 def generate_steps_ai(plan_data: Dict, domain: str, config: Dict) -> List[str]:
     rag_context = _get_rag_context(plan_data.get("strategy"))
 
@@ -108,16 +120,46 @@ Format JSON list.
 
     try:
         resp = call_groq(prompt, config)
-        return eval(resp) if resp.startswith("[") else ["Step 1", "Step 2", "Step 3"]
+        result = _parse_ai_list_response(resp)
+        if result: return result       
     except:
-        return ["Step 1", "Step 2", "Step 3"]
+        pass
+        
+    return _get_fallback_steps(plan_data.get("strategy", ""))
+
+def _get_fallback_steps(plan_name: str) -> List[str]:
+    plan_lower = plan_name.lower()
+    
+    if "conservative" in plan_lower or "saver" in plan_lower or "weather" in plan_lower:
+        return [
+            "Kurangi target produksi harian pada shift malam",
+            "Prioritaskan maintenance preventif alat utama",
+            "Tingkatkan monitoring cuaca per jam",
+            "Siapkan area dumping cadangan yang lebih dekat",
+            "Lakukan briefing keselamatan khusus cuaca basah"
+        ]
+    elif "aggressive" in plan_lower or "boost" in plan_lower or "max" in plan_lower:
+        return [
+            "Optimalkan pergantian shift (hot seat change)",
+            "Aktifkan unit cadangan (standby units)",
+            "Tingkatkan kecepatan hauling di segmen jalan lurus",
+            "Prioritaskan loading point dengan cycle time terpendek",
+            "Monitor fuel burn rate secara ketat"
+        ]
+    else: 
+        return [
+            "Jalankan operasi sesuai baseline schedule",
+            "Monitor KPI per 4 jam dan sesuaikan jika ada deviasi",
+            "Optimalkan antrean di ROM/Jetty",
+            "Pastikan ketersediaan operator > 95%",
+            "Lakukan evaluasi harian pasca-operasi"
+        ]
     
 def generate_strengths_ai(plan_data: Dict, domain: str, config: Dict) -> List[str]:
-    print(f"🔄 Generating strengths for {plan_data.get('strategy')}...")
+    print(f"Generating strengths for {plan_data.get('strategy')}...")
     
     rag_context = _get_rag_context(plan_data.get("strategy"))
     
-    # Gunakan prompt yang lebih spesifik
     prompt = f"""
 Gunakan konteks berikut:
 {rag_context}
@@ -138,43 +180,36 @@ JSON array:
     
     try:
         resp = call_groq(prompt, config)
-        print(f"📥 Raw AI response for strengths: {resp}")
+        print(f"Raw AI response for strengths: {resp}")
         
-        # Bersihkan response
         import re
         import json
         
-        # Hapus markdown code blocks jika ada
         cleaned = re.sub(r'```json\s*|\s*```', '', resp).strip()
         
-        # Cari array JSON dalam response
         match = re.search(r'\[.*\]', cleaned, re.DOTALL)
         if match:
             json_str = match.group(0)
             strengths = json.loads(json_str)
             
             if isinstance(strengths, list) and len(strengths) > 0:
-                # Pastikan semua item adalah string
                 strengths = [str(item) for item in strengths[:3]]
-                print(f"✅ Parsed strengths: {strengths}")
+                print(f"Parsed strengths: {strengths}")
                 return strengths
         
-        # Jika parsing gagal, gunakan fallback berdasarkan data
         return _generate_fallback_strengths(plan_data, domain)
         
     except Exception as e:
-        print(f"❌ Error generating strengths: {e}")
+        print(f"Error generating strengths: {e}")
         return _generate_fallback_strengths(plan_data, domain)
 
 def _generate_fallback_strengths(plan_data: Dict, domain: str) -> List[str]:
-    """Generate fallback strengths berdasarkan data plan"""
     fin = plan_data.get("financial", {})
     savings = fin.get('cost_savings_usd', 0)
     risk = fin.get('avg_risk_score', 0.5)
     
     strengths = []
     
-    # Berdasarkan tipe plan
     plan_name = plan_data.get("strategy", "").lower()
     
     if "conservative" in plan_name:
@@ -194,7 +229,7 @@ def _generate_fallback_strengths(plan_data: Dict, domain: str) -> List[str]:
         strengths.append("Maksimalisasi output produksi untuk permintaan tinggi")
         strengths.append("Pemanfaatan optimal kapasitas alat berat")
         strengths.append("Potensi peningkatan revenue yang signifikan")
-        if savings < 0:  # Biaya lebih tinggi
+        if savings < 0:  
             strengths.append("Investasi untuk peningkatan produktivitas jangka panjang")
     
     else:
@@ -202,4 +237,4 @@ def _generate_fallback_strengths(plan_data: Dict, domain: str) -> List[str]:
         strengths.append("Mempertimbangkan berbagai faktor operasional")
         strengths.append("Dapat diimplementasikan dengan kontrol risiko")
     
-    return strengths[:3]  # Maksimal 3 items
+    return strengths[:3]  
