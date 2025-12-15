@@ -9,7 +9,7 @@ With RAG + LLM (Groq) integration
 
 import re
 import json
-from typing import Dict, List
+from typing import Dict, List, Any
 from app.services.llm import call_groq
 
 try:
@@ -28,6 +28,16 @@ def _get_rag_context(query: str) -> str:
     except:
         pass
     return ""
+
+def _clean_and_parse_json(response_text: str) -> Dict[str, Any]:
+    """Helper untuk membersihkan output JSON dari AI."""
+    try:
+        cleaned = re.sub(r'```json\s*|\s*```', '', response_text).strip()
+        cleaned = re.sub(r'```\s*|\s*```', '', cleaned).strip()
+        return json.loads(cleaned)
+    except Exception as e:
+        print(f"Error parsing AI JSON: {e}")
+        return {}
 
 def _get_fallbacks(plan_data: Dict) -> Dict[str, Any]:
     """Return manual fallback data if AI fails"""
