@@ -5,20 +5,32 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Load API key from environment variables
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-# Create client
-groq_client = Groq(api_key=GROQ_API_KEY)
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
 
 def call_groq(prompt: str, config: dict) -> str:
     try:
-        response = groq_client.chat.completions.create(
-            model=config.get("model", "llama-3.3-70b-versatile"),
-            messages=[{"role": "user", "content": prompt}],
-            temperature=config.get("temperature", 0.2),
-            max_tokens=config.get("max_tokens", 1024)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+
+        response = model.generate_content(
+            prompt,
+            safety_settings=safety_settings,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.3, 
+                max_output_tokens=2000
+            )
         )
-        return response.choices[0].message.content
+        
+        return response.text
+        
     except Exception as e:
-        print("⚠️ LLM ERROR:", e)
-        return f"Penjelasan otomatis gagal: {e}"
+        print(f"GEMINI ERROR: {e}")
+        return '{"justification": "Maaf, analisis AI sedang sibuk. Data ditampilkan berdasarkan perhitungan manual."}'
