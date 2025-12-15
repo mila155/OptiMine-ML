@@ -11,7 +11,7 @@ if GOOGLE_API_KEY:
 
 def call_groq(prompt: str, config: dict) -> str:
     try:
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         safety_settings = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
