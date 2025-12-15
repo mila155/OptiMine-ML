@@ -118,18 +118,39 @@ class PredictionService:
         
         mining_predictions = self.models['mining'].predict(X_mine)
         
-        df['predicted_production_ton'] = mining_predictions[:, 0]  
-        df['efficiency_factor'] = mining_predictions[:, 1]         
-        df['cycle_delay_min'] = mining_predictions[:, 2]           
+        raw_predicted_production = mining_predictions[:, 0]
+        df['predicted_production_ton'] = np.maximum(
+            df['planned_production_ton'] * 0.05,  
+            np.minimum(
+                df['planned_production_ton'] * 1.3,  
+                raw_predicted_production
+            )
+        )
+        raw_efficiency = mining_predictions[:, 1]
+        df['efficiency_factor'] = np.clip(raw_efficiency, 0.1, 1.0)                 
+        raw_delay = mining_predictions[:, 2]
+        df['cycle_delay_min'] = np.clip(raw_delay, 0, 180)
         
         df['production_gap_ton'] = df['planned_production_ton'] - df['predicted_production_ton']
         df['production_gap_pct'] = (df['production_gap_ton'] / df['planned_production_ton']) * 100
         
-        df['confidence_score'] = df['efficiency_factor'].clip(0, 1)
+        df['confidence_score'] = df['efficiency_factor']
         
         df['risk_level'] = df.apply(self._calculate_mining_risk, axis=1)
         
         df['weather_impact'] = df.apply(self._classify_weather_impact, axis=1)
+
+        negative_production = (df['predicted_production_ton'] < 0).sum()
+        if negative_production > 0:
+            print(f"WARNING: {negative_production} rows still have negative production after clipping!")
+        
+        low_efficiency = (df['efficiency_factor'] < 0.3).sum()
+        if low_efficiency > 0:
+            print(f"INFO: {low_efficiency} rows have efficiency < 0.3 (possible extreme weather)")
+        
+        extreme_gap = (df['production_gap_pct'].abs() > 50).sum()
+        if extreme_gap > 0:
+            print(f"INFO: {extreme_gap} rows have production gap > 50%")        
         
         return df
     
@@ -166,11 +187,21 @@ class PredictionService:
         
         shipping_predictions = self.models['shipping'].predict(X_ship)
         
-        df['predicted_loading_hours'] = shipping_predictions[:, 0]    
-        df['loading_efficiency'] = shipping_predictions[:, 1]         
-        df['predicted_demurrage_cost'] = shipping_predictions[:, 2]   
+        raw_loading_hours = shipping_predictions[:, 0]
+        expected_base_hours = df['planned_volume_ton'] / df['loading_rate_tph']
+        df['predicted_loading_hours'] = np.maximum(
+            expected_base_hours * 0.5,   
+            np.minimum(
+                expected_base_hours * 5.0,  
+                raw_loading_hours
+            )
+        )
+        raw_efficiency = shipping_predictions[:, 1]
+        df['loading_efficiency'] = np.clip(raw_efficiency, 0.0, 1.0)       
+        raw_demurrage = shipping_predictions[:, 2]
+        df['predicted_demurrage_cost'] = np.maximum(0, raw_demurrage)  
         
-        df['confidence_score'] = df['loading_efficiency'].clip(0, 1)
+        df['confidence_score'] = df['loading_efficiency']
         
         df['risk_level'] = df.apply(self._calculate_shipping_risk, axis=1)
         
@@ -181,6 +212,14 @@ class PredictionService:
         df['weather_impact'] = df.apply(self._classify_shipping_weather, axis=1)
         
         df['recommended_action'] = df.apply(self._recommend_shipping_action, axis=1)
+
+        negative_demurrage = (df['predicted_demurrage_cost'] < 0).sum()
+        if negative_demurrage > 0:
+            print(f"WARNING: {negative_demurrage} rows had negative demurrage (fixed to 0)")
+        
+        zero_efficiency = (df['loading_efficiency'] == 0).sum()
+        if zero_efficiency > 0:
+            print(f"INFO: {zero_efficiency} vessels marked as SUSPENDED (0% efficiency)")
         
         return df
     
