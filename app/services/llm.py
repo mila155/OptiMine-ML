@@ -11,6 +11,8 @@ if GOOGLE_API_KEY:
 
 def call_groq(prompt: str, config: dict) -> str:
     try:
+        api_key = os.getenv("GOOGLE_API_KEY")
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.5-flash')
         
         safety_settings = [
