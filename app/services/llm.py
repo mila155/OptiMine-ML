@@ -8,10 +8,12 @@ def call_groq(prompt: str, config: dict) -> str:
     try:
         if "GOOGLE_APPLICATION_CREDENTIALS" in os.environ:
             del os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+            
         api_key = os.environ.get("GOOGLE_API_KEY")
         if not api_key:
             print("CRITICAL: GOOGLE_API_KEY tidak ditemukan!")
             return '{"justification": "Error: API Key Google tidak ditemukan. Cek Variables di Railway."}'
+            
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel('gemini-2.5-flash')
         
@@ -31,7 +33,6 @@ def call_groq(prompt: str, config: dict) -> str:
             prompt,
             safety_settings=safety_settings,
             generation_config=generation_config
-            )
         )
         
         return response.text
